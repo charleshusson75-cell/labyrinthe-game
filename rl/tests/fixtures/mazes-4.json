@@ -1,0 +1,29 @@
+{
+  "kind": "mazes",
+  "size": 4,
+  "random": [
+    {"seed":3908,"budget":3,"maze":{"walls":["12-13","4-5","5-6"],"entrance":12,"exit":6}},
+    {"seed":4008,"budget":3,"maze":{"walls":["10-11","14-15","5-6"],"entrance":4,"exit":15}},
+    {"seed":3909,"budget":7,"maze":{"walls":["11-15","13-14","4-5","6-10","6-7","9-10","9-13"],"entrance":8,"exit":14}},
+    {"seed":4009,"budget":7,"maze":{"walls":["1-5","11-15","12-13","2-6","4-8","6-10","6-7"],"entrance":14,"exit":1}},
+    {"seed":3910,"budget":9,"maze":{"walls":["0-1","10-11","2-6","4-5","5-6","7-11","8-9","9-10","9-13"],"entrance":14,"exit":9}},
+    {"seed":4010,"budget":9,"maze":{"walls":["1-5","10-11","13-14","14-15","4-5","6-10","6-7","8-9","9-13"],"entrance":2,"exit":12}},
+    {"seed":3911,"budget":12,"maze":{"walls":["0-1","1-2","11-15","12-13","14-15","2-3","2-6","4-8","5-9","6-10","6-7","9-10"],"entrance":3,"exit":9}},
+    {"seed":4011,"budget":12,"maze":{"walls":["0-4","10-14","2-3","3-7","4-5","4-8","5-6","5-9","6-10","8-12","8-9","9-13"],"entrance":0,"exit":12}},
+    {"seed":3912,"budget":1,"maze":{"walls":["4-8"],"entrance":6,"exit":4}},
+    {"seed":4012,"budget":1,"maze":{"walls":["8-9"],"entrance":4,"exit":13}},
+    {"seed":3913,"budget":13,"maze":{"walls":["1-5","10-14","11-15","12-13","14-15","2-3","2-6","3-7","5-6","6-10","7-11","8-9","9-13"],"entrance":2,"exit":10}},
+    {"seed":4013,"budget":13,"maze":{"walls":["0-4","1-5","10-11","10-14","11-15","4-5","4-8","5-6","6-10","6-7","8-12","8-9","9-13"],"entrance":11,"exit":6}}
+  ],
+  "budget": 7,
+  "crafted": [
+    {"name":"valid","maze":{"walls":["10-14","11-15","3-7","5-6","5-9","6-10","8-9"],"entrance":13,"exit":1},"issues":[]},
+    {"name":"valid-uniform","maze":{"walls":["10-11","14-15","4-5","4-8","5-6","8-12","9-10"],"entrance":12,"exit":9},"issues":[]},
+    {"name":"one-wall-short","maze":{"walls":["11-15","3-7","5-6","5-9","6-10","8-9"],"entrance":13,"exit":1},"issues":["walls-left"]},
+    {"name":"one-wall-extra","maze":{"walls":["10-14","11-15","3-7","5-6","5-9","6-10","8-9","13-14"],"entrance":13,"exit":1},"issues":["too-many-walls"]},
+    {"name":"same-cell","maze":{"walls":["10-14","11-15","3-7","5-6","5-9","6-10","8-9"],"entrance":13,"exit":13},"issues":["same-cell"]},
+    {"name":"no-path","maze":{"walls":["0-1","1-2","1-5","13-14","2-6","5-6","9-10"],"entrance":13,"exit":1},"issues":["no-path"]},
+    {"name":"no-entrance","maze":{"walls":["10-14","11-15","3-7","5-6","5-9","6-10","8-9"],"entrance":null,"exit":1},"issues":["no-entrance"]},
+    {"name":"no-exit","maze":{"walls":["10-14","11-15","3-7","5-6","5-9","6-10","8-9"],"entrance":13,"exit":null},"issues":["no-exit"]}
+  ]
+}

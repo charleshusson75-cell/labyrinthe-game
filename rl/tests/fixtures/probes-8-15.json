@@ -1,0 +1,28 @@
+{
+  "kind": "probes",
+  "size": 8,
+  "budget": 56,
+  "source": "uniform",
+  "policy": "random",
+  "maze": {"walls":["11-12","11-19","12-13","13-21","16-17","16-24","17-18","19-20","2-10","20-28","21-22","23-31","25-26","26-27","27-28","28-29","28-36","29-37","3-4","30-38","31-39","32-33","33-34","33-41","36-37","38-39","38-46","39-47","4-12","4-5","40-41","41-42","41-49","42-43","42-50","43-44","43-51","44-45","44-52","46-54","5-13","50-51","50-58","52-60","53-54","55-63","56-57","58-59","59-60","6-7","60-61","61-62","62-63","7-15","8-16","9-17"],"entrance":31,"exit":29},
+  "mazeSeed": null,
+  "issues": [],
+  "probes": [
+    {"from":31,"dir":"L","error":null,"open":true,"reached":30,"hits":0,"moves":1,"done":false},
+    {"from":31,"dir":"D","error":null,"open":false,"reached":null,"hits":1,"moves":2,"done":false},
+    {"from":31,"dir":"X","error":"invalid","open":null,"reached":null,"hits":1,"moves":2,"done":false},
+    {"from":38,"dir":"U","error":"not-reached","open":null,"reached":null,"hits":1,"moves":2,"done":false},
+    {"from":31,"dir":"L","error":"known","open":null,"reached":null,"hits":1,"moves":2,"done":false},
+    {"from":31,"dir":"U","error":null,"open":false,"reached":null,"hits":2,"moves":3,"done":false},
+    {"from":30,"dir":"D","error":null,"open":false,"reached":null,"hits":3,"moves":4,"done":false},
+    {"from":30,"dir":"U","error":null,"open":true,"reached":22,"hits":3,"moves":5,"done":false},
+    {"from":30,"dir":"L","error":null,"open":true,"reached":29,"hits":3,"moves":6,"done":true},
+    {"from":30,"dir":"D","error":"over","open":null,"reached":null,"hits":3,"moves":6,"done":true},
+    {"from":30,"dir":"U","error":"over","open":null,"reached":null,"hits":3,"moves":6,"done":true}
+  ],
+  "ranks": [
+    {"at":0,"ranked":[[31,3,2],[31,0,4],[31,2,4]]},
+    {"at":3,"ranked":[[30,3,1],[31,0,3],[30,0,3],[30,2,3]]},
+    {"at":7,"ranked":[[30,3,1],[30,0,3]]}
+  ]
+}

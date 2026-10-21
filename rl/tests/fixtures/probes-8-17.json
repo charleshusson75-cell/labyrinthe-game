@@ -1,0 +1,39 @@
+{
+  "kind": "probes",
+  "size": 8,
+  "budget": 37,
+  "source": "uniform",
+  "policy": "normal",
+  "maze": {"walls":["0-1","1-2","10-18","11-19","12-20","13-14","14-15","15-23","18-26","19-20","19-27","2-10","20-21","25-26","27-28","29-30","29-37","3-11","31-39","34-35","34-42","35-36","36-37","40-41","40-48","43-51","48-49","5-6","50-51","51-52","51-59","55-63","57-58","6-14","6-7","62-63","8-9"],"entrance":8,"exit":46},
+  "mazeSeed": null,
+  "issues": [],
+  "probes": [
+    {"from":8,"dir":"D","error":null,"open":true,"reached":16,"hits":0,"moves":1,"done":false},
+    {"from":16,"dir":"R","error":null,"open":true,"reached":17,"hits":0,"moves":2,"done":false},
+    {"from":17,"dir":"R","error":null,"open":true,"reached":18,"hits":0,"moves":3,"done":false},
+    {"from":18,"dir":"R","error":null,"open":true,"reached":19,"hits":0,"moves":4,"done":false},
+    {"from":16,"dir":"L","error":"border","open":null,"reached":null,"hits":0,"moves":4,"done":false},
+    {"from":19,"dir":"D","error":null,"open":false,"reached":null,"hits":1,"moves":5,"done":false},
+    {"from":19,"dir":"R","error":null,"open":false,"reached":null,"hits":2,"moves":6,"done":false},
+    {"from":18,"dir":"D","error":null,"open":false,"reached":null,"hits":3,"moves":7,"done":false},
+    {"from":19,"dir":"U","error":null,"open":false,"reached":null,"hits":4,"moves":8,"done":false},
+    {"from":19,"dir":"D","error":"known","open":null,"reached":null,"hits":4,"moves":8,"done":false},
+    {"from":17,"dir":"D","error":null,"open":true,"reached":25,"hits":4,"moves":9,"done":false},
+    {"from":25,"dir":"R","error":null,"open":false,"reached":null,"hits":5,"moves":10,"done":false},
+    {"from":25,"dir":"D","error":null,"open":true,"reached":33,"hits":5,"moves":11,"done":false},
+    {"from":33,"dir":"D","error":null,"open":true,"reached":41,"hits":5,"moves":12,"done":false},
+    {"from":41,"dir":"R","error":null,"open":true,"reached":42,"hits":5,"moves":13,"done":false},
+    {"from":42,"dir":"R","error":null,"open":true,"reached":43,"hits":5,"moves":14,"done":false},
+    {"from":43,"dir":"R","error":null,"open":true,"reached":44,"hits":5,"moves":15,"done":false},
+    {"from":8,"dir":"R","error":null,"open":false,"reached":null,"hits":6,"moves":16,"done":false},
+    {"from":44,"dir":"R","error":null,"open":true,"reached":45,"hits":6,"moves":17,"done":false},
+    {"from":45,"dir":"R","error":null,"open":true,"reached":46,"hits":6,"moves":18,"done":true},
+    {"from":33,"dir":"D","error":"over","open":null,"reached":null,"hits":6,"moves":18,"done":true},
+    {"from":33,"dir":"L","error":"over","open":null,"reached":null,"hits":6,"moves":18,"done":true}
+  ],
+  "ranks": [
+    {"at":0,"ranked":[[8,1,10],[8,2,10],[8,0,12]]},
+    {"at":3,"ranked":[[18,1,7],[18,2,7],[17,2,8],[8,0,9],[8,1,9],[16,2,9],[17,0,9],[18,0,9]]},
+    {"at":15,"ranked":[[42,1,4],[8,0,6],[8,1,6],[16,2,6],[17,0,6],[18,0,6],[25,3,6],[33,1,6],[33,3,6],[41,2,6],[41,3,6],[42,0,6],[42,2,6]]}
+  ]
+}

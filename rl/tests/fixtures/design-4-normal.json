@@ -1,0 +1,8 @@
+{
+  "kind": "design",
+  "size": 4,
+  "level": "normal",
+  "budget": 7,
+  "seed": 31378,
+  "maze": {"walls":["1-5","13-14","2-6","3-7","5-9","6-10","9-10"],"entrance":3,"exit":14}
+}

@@ -1,0 +1,26 @@
+{
+  "kind": "probes",
+  "size": 6,
+  "budget": 8,
+  "source": "randomMaze",
+  "policy": "normal",
+  "maze": {"walls":["12-13","13-14","14-20","20-26","21-22","25-31","26-32","9-10"],"entrance":31,"exit":26},
+  "mazeSeed": 198,
+  "issues": [],
+  "probes": [
+    {"from":31,"dir":"U","error":null,"open":false,"reached":null,"hits":1,"moves":1,"done":false},
+    {"from":31,"dir":"R","error":null,"open":true,"reached":32,"hits":1,"moves":2,"done":false},
+    {"from":32,"dir":"U","error":null,"open":false,"reached":null,"hits":2,"moves":3,"done":false},
+    {"from":32,"dir":"R","error":null,"open":true,"reached":33,"hits":2,"moves":4,"done":false},
+    {"from":33,"dir":"U","error":null,"open":true,"reached":27,"hits":2,"moves":5,"done":false},
+    {"from":27,"dir":"L","error":null,"open":true,"reached":26,"hits":2,"moves":6,"done":true},
+    {"from":32,"dir":"R","error":"over","open":null,"reached":null,"hits":2,"moves":6,"done":true},
+    {"from":26,"dir":"R","error":"over","open":null,"reached":null,"hits":2,"moves":6,"done":true}
+  ],
+  "ranks": [
+    {"at":0,"ranked":[[31,0,2],[31,1,2],[31,3,4]]},
+    {"at":1,"ranked":[[31,1,2],[31,3,4]]},
+    {"at":3,"ranked":[[32,1,3],[31,3,4]]},
+    {"at":5,"ranked":[[27,3,1],[31,3,3],[33,1,3],[27,0,3],[27,1,3]]}
+  ]
+}

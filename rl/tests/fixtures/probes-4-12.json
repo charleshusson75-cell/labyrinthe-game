@@ -1,0 +1,35 @@
+{
+  "kind": "probes",
+  "size": 4,
+  "budget": 3,
+  "source": "randomMaze",
+  "policy": "normal",
+  "maze": {"walls":["12-13","5-6","8-9"],"entrance":6,"exit":8},
+  "mazeSeed": 136,
+  "issues": [],
+  "probes": [
+    {"from":6,"dir":"D","error":null,"open":true,"reached":10,"hits":0,"moves":1,"done":false},
+    {"from":10,"dir":"L","error":null,"open":true,"reached":9,"hits":0,"moves":2,"done":false},
+    {"from":9,"dir":"L","error":null,"open":false,"reached":null,"hits":1,"moves":3,"done":false},
+    {"from":9,"dir":"D","error":null,"open":true,"reached":13,"hits":1,"moves":4,"done":false},
+    {"from":13,"dir":"D","error":"border","open":null,"reached":null,"hits":1,"moves":4,"done":false},
+    {"from":9,"dir":"U","error":null,"open":true,"reached":5,"hits":1,"moves":5,"done":false},
+    {"from":13,"dir":"L","error":null,"open":false,"reached":null,"hits":2,"moves":6,"done":false},
+    {"from":5,"dir":"L","error":null,"open":true,"reached":4,"hits":2,"moves":7,"done":false},
+    {"from":4,"dir":"L","error":"border","open":null,"reached":null,"hits":2,"moves":7,"done":false},
+    {"from":6,"dir":"U","error":null,"open":true,"reached":2,"hits":2,"moves":8,"done":false},
+    {"from":4,"dir":"D","error":null,"open":true,"reached":8,"hits":2,"moves":9,"done":true},
+    {"from":5,"dir":"R","error":"over","open":null,"reached":null,"hits":2,"moves":9,"done":true},
+    {"from":10,"dir":"D","error":"over","open":null,"reached":null,"hits":2,"moves":9,"done":true}
+  ],
+  "ranks": [
+    {"at":0,"ranked":[[6,2,3],[6,3,3],[6,0,5],[6,1,5]]},
+    {"at":1,"ranked":[[10,3,2],[6,3,3],[6,0,4],[6,1,4],[10,1,4],[10,2,4]]},
+    {"at":2,"ranked":[[9,3,1],[6,0,3],[6,1,3],[6,3,3],[10,1,3],[10,2,3],[9,0,3],[9,2,3]]},
+    {"at":4,"ranked":[[13,3,2],[6,3,3],[9,0,3],[6,0,4],[6,1,4],[10,1,4],[10,2,4],[13,1,4]]},
+    {"at":5,"ranked":[[13,3,2],[6,3,3],[9,0,3],[6,0,4],[6,1,4],[10,1,4],[10,2,4],[13,1,4]]},
+    {"at":7,"ranked":[[5,3,2],[6,3,3.5],[5,1,3.5],[6,0,4],[6,1,4],[10,1,4],[10,2,4],[13,1,4],[5,0,4]]},
+    {"at":8,"ranked":[[4,2,1],[6,3,2.5],[5,1,2.5],[6,0,3],[6,1,3],[10,1,3],[10,2,3],[13,1,3],[5,0,3],[4,0,3]]},
+    {"at":10,"ranked":[[4,2,1],[6,3,2.5],[5,1,2.5],[6,1,3],[10,1,3],[10,2,3],[13,1,3],[5,0,3],[4,0,3],[2,1,3],[2,3,3]]}
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "kind": "probes",
+  "size": 10,
+  "budget": 61,
+  "source": "uniform",
+  "policy": "hard",
+  "maze": {"walls":["0-1","0-10","11-21","13-14","15-25","17-18","18-19","19-29","21-31","23-24","25-26","28-38","3-13","3-4","30-31","30-40","31-32","32-33","32-42","34-35","34-44","36-46","39-49","4-14","4-5","40-50","46-47","46-56","48-49","5-6","51-61","52-62","53-63","56-57","57-67","59-69","6-7","60-61","60-70","65-66","66-76","67-68","67-77","71-72","75-85","77-78","79-89","8-9","80-81","80-90","81-91","82-83","83-93","85-95","86-87","90-91","91-92","92-93","93-94","96-97","97-98"],"entrance":6,"exit":10},
+  "mazeSeed": null,
+  "issues": [],
+  "probes": [
+    {"from":6,"dir":"L","error":null,"open":false,"reached":null,"hits":1,"moves":1,"done":false},
+    {"from":6,"dir":"D","error":null,"open":true,"reached":16,"hits":1,"moves":2,"done":false},
+    {"from":16,"dir":"L","error":null,"open":true,"reached":15,"hits":1,"moves":3,"done":false},
+    {"from":15,"dir":"L","error":null,"open":true,"reached":14,"hits":1,"moves":4,"done":false},
+    {"from":6,"dir":"X","error":"invalid","open":null,"reached":null,"hits":1,"moves":4,"done":false},
+    {"from":14,"dir":"L","error":null,"open":false,"reached":null,"hits":2,"moves":5,"done":false},
+    {"from":14,"dir":"U","error":null,"open":false,"reached":null,"hits":3,"moves":6,"done":false},
+    {"from":14,"dir":"D","error":null,"open":true,"reached":24,"hits":3,"moves":7,"done":false},
+    {"from":59,"dir":"L","error":"not-reached","open":null,"reached":null,"hits":3,"moves":7,"done":false},
+    {"from":14,"dir":"X","error":"invalid","open":null,"reached":null,"hits":3,"moves":7,"done":false},
+    {"from":24,"dir":"L","error":null,"open":false,"reached":null,"hits":4,"moves":8,"done":false},
+    {"from":24,"dir":"D","error":null,"open":true,"reached":34,"hits":4,"moves":9,"done":false},
+    {"from":34,"dir":"L","error":null,"open":true,"reached":33,"hits":4,"moves":10,"done":false},
+    {"from":33,"dir":"L","error":null,"open":false,"reached":null,"hits":5,"moves":11,"done":false},
+    {"from":33,"dir":"U","error":null,"open":true,"reached":23,"hits":5,"moves":12,"done":false},
+    {"from":23,"dir":"U","error":null,"open":true,"reached":13,"hits":5,"moves":13,"done":false},
+    {"from":13,"dir":"R","error":"known","open":null,"reached":null,"hits":5,"moves":13,"done":false},
+    {"from":13,"dir":"L","error":null,"open":true,"reached":12,"hits":5,"moves":14,"done":false},
+    {"from":12,"dir":"L","error":null,"open":true,"reached":11,"hits":5,"moves":15,"done":false},
+    {"from":11,"dir":"L","error":null,"open":true,"reached":10,"hits":5,"moves":16,"done":true},
+    {"from":24,"dir":"L","error":"over","open":null,"reached":null,"hits":5,"moves":16,"done":true},
+    {"from":10,"dir":"U","error":"over","open":null,"reached":null,"hits":5,"moves":16,"done":true}
+  ],
+  "ranks": [
+    {"at":0,"ranked":[[6,2,7],[6,3,7],[6,1,9]]}
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "kind": "probes",
+  "size": 6,
+  "budget": 19,
+  "source": "uniform",
+  "policy": "easy",
+  "maze": {"walls":["10-16","13-19","14-20","18-19","2-3","20-21","20-26","21-27","22-28","24-25","26-32","27-33","29-35","3-4","3-9","33-34","34-35","6-12","6-7"],"entrance":1,"exit":8},
+  "mazeSeed": null,
+  "issues": [],
+  "probes": [
+    {"from":1,"dir":"R","error":null,"open":true,"reached":2,"hits":0,"moves":1,"done":false},
+    {"from":36,"dir":"U","error":"invalid","open":null,"reached":null,"hits":0,"moves":1,"done":false},
+    {"from":1,"dir":"D","error":null,"open":true,"reached":7,"hits":0,"moves":2,"done":false},
+    {"from":7,"dir":"R","error":null,"open":true,"reached":8,"hits":0,"moves":3,"done":true},
+    {"from":8,"dir":"D","error":"over","open":null,"reached":null,"hits":0,"moves":3,"done":true},
+    {"from":1,"dir":"L","error":"over","open":null,"reached":null,"hits":0,"moves":3,"done":true}
+  ],
+  "ranks": [
+    {"at":0,"ranked":[[1,1,2],[1,2,2],[1,3,4]]}
+  ]
+}

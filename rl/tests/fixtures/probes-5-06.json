@@ -1,0 +1,33 @@
+{
+  "kind": "probes",
+  "size": 5,
+  "budget": 16,
+  "source": "randomMaze",
+  "policy": "hard",
+  "maze": {"walls":["1-6","10-11","11-16","13-14","13-18","15-16","17-18","17-22","18-19","2-3","21-22","3-8","5-6","6-7","7-12","7-8"],"entrance":24,"exit":10},
+  "mazeSeed": 161,
+  "issues": [],
+  "probes": [
+    {"from":24,"dir":"U","error":null,"open":true,"reached":19,"hits":0,"moves":1,"done":false},
+    {"from":19,"dir":"U","error":null,"open":true,"reached":14,"hits":0,"moves":2,"done":false},
+    {"from":14,"dir":"X","error":"invalid","open":null,"reached":null,"hits":0,"moves":2,"done":false},
+    {"from":14,"dir":"L","error":null,"open":false,"reached":null,"hits":1,"moves":3,"done":false},
+    {"from":19,"dir":"L","error":null,"open":false,"reached":null,"hits":2,"moves":4,"done":false},
+    {"from":24,"dir":"L","error":null,"open":true,"reached":23,"hits":2,"moves":5,"done":false},
+    {"from":23,"dir":"L","error":null,"open":true,"reached":22,"hits":2,"moves":6,"done":false},
+    {"from":22,"dir":"L","error":null,"open":false,"reached":null,"hits":3,"moves":7,"done":false},
+    {"from":22,"dir":"U","error":null,"open":false,"reached":null,"hits":4,"moves":8,"done":false},
+    {"from":23,"dir":"U","error":null,"open":true,"reached":18,"hits":4,"moves":9,"done":false},
+    {"from":18,"dir":"L","error":null,"open":false,"reached":null,"hits":5,"moves":10,"done":false},
+    {"from":18,"dir":"U","error":null,"open":false,"reached":null,"hits":6,"moves":11,"done":false},
+    {"from":14,"dir":"U","error":null,"open":true,"reached":9,"hits":6,"moves":12,"done":false},
+    {"from":9,"dir":"D","error":"known","open":null,"reached":null,"hits":6,"moves":12,"done":false},
+    {"from":14,"dir":"R","error":"border","open":null,"reached":null,"hits":6,"moves":12,"done":false}
+  ],
+  "ranks": [
+    {"at":0,"ranked":[[24,0,6],[24,3,6]]},
+    {"at":1,"ranked":[[19,0,5],[19,3,5],[24,3,6]]},
+    {"at":6,"ranked":[[23,0,5],[23,3,5],[14,0,6]]},
+    {"at":7,"ranked":[[22,0,4],[22,3,4],[23,0,5],[14,0,6]]}
+  ]
+}
