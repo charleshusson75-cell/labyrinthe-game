@@ -4,7 +4,7 @@ import { chooseProbe, designMaze } from './brain.js';
 
 /**
  * @param session  the bot's own Session (guest seat)
- * @param o.level  'easy' | 'normal' | 'hard'
+ * @param o.level  'easy' | 'normal' | 'hard' | 'expert'
  * @param o.line   (kind) => string | null — localized banter, kinds: hit | bonk | win | lose | hello
  */
 export function createBotController(session, { level = 'normal', rng = Math.random, line = () => null, speed = 1 }) {
@@ -28,7 +28,8 @@ export function createBotController(session, { level = 'normal', rng = Math.rand
       return {
         delay: 550 + rng() * 650,
         run: () => {
-          const p = chooseProbe({ size: v.size, progress: v.mine, exit: s.round.oppES.exit, level, rng });
+          const { entrance, exit } = s.round.oppES;
+          const p = chooseProbe({ size: v.size, progress: v.mine, entrance, exit, wallCount: s.settings.walls, level, rng });
           if (p) session.probe(p.from, p.dir);
         },
       };

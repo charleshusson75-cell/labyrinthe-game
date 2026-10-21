@@ -4,8 +4,9 @@ import { DIRS, edgeKey, neighbor } from '../game/grid.js';
 import { probeError, progressOf } from '../game/match.js';
 import { isOpen, randomMaze } from '../game/maze.js';
 import { pick } from '../game/random.js';
+import { expertProbe } from './expert.js';
 
-export const LEVELS = ['easy', 'normal', 'hard'];
+export const LEVELS = ['easy', 'normal', 'hard', 'expert'];
 
 /**
  * Optimistic distance from every cell to `exit`: known passages cost 0, unknown sides cost 1
@@ -49,7 +50,15 @@ export function rankProbes(size, progress, exit) {
   return out.sort((a, b) => a.score - b.score);
 }
 
-export function chooseProbe({ size, progress, exit, level = 'normal', rng }) {
+/**
+ * The bot's next probe. 'expert' searches a belief over the hidden maze (expert.js) and needs the
+ * opponent's entrance and wall budget; without them, or if no maze fits what it saw, it plays 'hard'.
+ */
+export function chooseProbe({ size, progress, exit, level = 'normal', rng, entrance, wallCount, expert }) {
+  if (level === 'expert' && entrance != null && wallCount != null) {
+    const p = expertProbe({ size, walls: wallCount, entrance, exit, progress, rng, ...expert });
+    if (p) return p;
+  }
   const ranked = rankProbes(size, progress, exit);
   if (!ranked.length) return null;
   const best = ranked.filter((p) => p.score === ranked[0].score);
@@ -59,14 +68,17 @@ export function chooseProbe({ size, progress, exit, level = 'normal', rng }) {
   return pick(rng, best);
 }
 
-/** Play a whole exploration of `maze` alone; returns how many walls were hit (= turns lost). */
-export function simulateSolve(maze, size, level, rng) {
+/**
+ * Play a whole exploration of `maze` alone; returns how many walls were hit (= turns lost).
+ * `expert` = options for the expert level (expert.js), e.g. a fixed particle count for benchmarks.
+ */
+export function simulateSolve(maze, size, level, rng, expert) {
   const walls = new Set(maze.walls);
   const probes = [];
   for (let guard = 0; guard < 4 * size * size; guard++) {
     const progress = progressOf(probes, maze.entrance, size);
     if (progress.visited.has(maze.exit)) return { hits: progress.hits, moves: progress.moves };
-    const p = chooseProbe({ size, progress, exit: maze.exit, level, rng });
+    const p = chooseProbe({ size, progress, exit: maze.exit, level, rng, entrance: maze.entrance, wallCount: walls.size, expert });
     if (!p) break;
     probes.push({ from: p.from, dir: p.dir, open: isOpen(walls, p.from, p.dir, size) });
   }

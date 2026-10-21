@@ -74,9 +74,17 @@ the starter wins ties):
 
 ## Next: self-improving bot
 
-Full design: [RL_DESIGN.md](RL_DESIGN.md). Ground truth: `research/exact_solve.mjs` (exact equilibrium
-on 3×3). Phases P1–P6 there: fast simulator with shared fixtures → Bayesian explorer → PSRO
-self-play → ship checkpoints as rated levels → per-player adaptation.
+Full design: [RL_DESIGN.md](RL_DESIGN.md); decisions D15–D20 (2026-10-22). Ground truth:
+`research/exact_solve.mjs` (exact equilibrium on 3×3). Revised phases:
+- P1: JAX engine + fixtures + baselines
+- P2: explorer learning
+- P3: league self-play on 5×5
+- P4: ship
+- P5: scale to 8×8/10×10
+- P6: play-time search
+- P7: per-player adaptation from real logs
+
+- 2026-10-22 — Boards up to 10×10 in the game (bot design effort scaled with size, ≤ ~150 ms).
 
 ## Ideas / later
 - Spectator mode

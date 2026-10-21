@@ -1,7 +1,20 @@
 # Toward a self-improving bot — design notes
 
-Status: research proposal (2026-10-21). Nothing here is implemented yet except the exact solver
-(`research/exact_solve.mjs`) and the benchmark (`scripts/benchmark.mjs`).
+Status: research plan. Written 2026-10-21, decisions taken 2026-10-22. Implemented so far: the
+exact solver (`research/exact_solve.mjs`) and the benchmark (`scripts/benchmark.mjs`).
+
+> **Decisions (2026-10-22, see [DECISIONS.md](DECISIONS.md) D15–D20)**
+> - **Saturation:** walls-hit ≈ W is an artifact of a predictable explorer. We train on walls hit,
+>   evaluate in duplicate format, randomize the wall budget during training, and re-pick default
+>   budgets from self-play data.
+> - **One pipeline, scaling to 10×10:** no enumeration; 4×4 → **5×5 first** → 8×8 → 10×10.
+> - **The maze is an image:** a (2N+1)² lattice, with fully convolutional networks that work at any
+>   size.
+> - **Stack:** Python + JAX in `rl/`, the JS engine as reference with shared fixtures, ONNX in the
+>   browser.
+> - **Algorithm:** league self-play with regularized PPO (MMD/R-NaD-style) plus exploiters. The
+>   explorer has a belief head; play-time search comes later.
+> - **Human data:** only real game logs, after self-play works.
 
 **TL;DR**
 
@@ -249,29 +262,27 @@ endpoint. That's a product decision, not a technical blocker.
 measure how many rounds the adaptive bot needs to beat the equilibrium bot against each. Then A/B
 with real players.
 
-## 5. Roadmap
+## 5. Roadmap (revised 2026-10-22)
 
 | Phase | Deliverable | Go/no-go |
 |---|---|---|
-| **P0 (done)** | Exact 3×3 solver; bot benchmark | Ground-truth values in §2 |
-| **P1** | Game-log format (JSONL), vectorized Python/JAX simulator, shared fixtures with the JS rules | Parity tests green; ≥ 10⁵ rounds/s |
-| **P2** | *Bayesian explorer without learning* (particles + counting + short search) | Clearly fewer wall hits than today's bot on 4×4/5×5; matches §2 on 3×3. Shippable as an "expert" level. |
-| **P3** | PSRO loop with neural explorer + quality-diversity designer, 4×4 → 5×5 | Exploitability falls generation after generation; Elo above "hard" |
-| **P4** | Ship checkpoints to the browser; levels = rating bands | Bot plays from the static site in < 50 ms per move |
-| **P5** | Version B: per-player adaptation with safe exploitation | Wins more than the equilibrium bot vs personas, never much worse |
-| **P6 (stretch)** | End-to-end MMD/R-NaD comparison; **race-aware explorer** | |
+| **P0 (done)** | Exact 3×3 solver; bot benchmark; 4×4–10×10 boards in the game | Ground-truth values in §2 |
+| **P1** | `rl/`: JAX engine (any size), lattice encoding, maze samplers, Python ports of today's bots, duplicate-format evaluator, JS→Python parity fixtures in CI | Parity green; ≥ 10⁵ explorer steps/s on 5×5 (CPU) |
+| **P2** | Explorer learning vs fixed designer mixes (random + "hard"), 4×4 → 5×5, with belief head | Fewer walls hit than the "hard" heuristic on 5×5; ≈ equilibrium values on 3×3 |
+| **P3** | Full league self-play on 5×5 (both roles, MMD-regularized PPO, exploiters) | Exploitability falls generation after generation; beats "hard" in duplicate matches |
+| **P4** | Ship the 5×5 bot to the site (ONNX); levels = rating bands of checkpoints | < 50 ms per move in the browser |
+| **P5** | Scale: curriculum to 8×8 / 10×10 on a cloud GPU; re-pick default wall budgets (D15) | Near-equilibrium hits/W well below 1; still improving |
+| **P6** | Play-time search with belief particles; race-aware explorer | Measurable gain over the raw network |
+| **P7** | Version B (per-player adaptation) from real game logs only | Beats the equilibrium bot against regulars, never much worse |
 
-About the race-aware explorer: you know your own maze and watch the opponent's progress, so you can
-predict when they'll finish. Optimal play then takes more risk when behind and less when ahead.
+The race-aware explorer (P6) uses the fact that you know your own maze and watch the opponent's
+progress: you can predict when they'll finish, so optimal play takes more risk when behind.
 
 ## 6. Open questions
 
-- **Rules vs. learning signal.** On 5×5 with 12 walls, strong players saturate near 12 hits and ties
-  are common (PLAN.md). A bigger default board, or scoring matches in pairs of rounds, gives
-  self-play (and humans) a sharper signal.
-- **Simulator language:** JAX (fastest, needs Python) or Rust/WebAssembly (one engine shared with the
-  site). To decide at P1.
-- **Human data:** whether to collect opt-in logs for the population prior and the personas.
+- **Default wall budgets per board size:** to be re-picked from self-play data (D15).
+- **Game rules for humans:** whether to add a two-round match mode with alternating starters, so
+  ties stop favouring whoever started.
 
 ## References
 
