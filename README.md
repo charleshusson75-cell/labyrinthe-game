@@ -59,6 +59,9 @@ Measure the bots against each other (win rates, how often the starter wins):
 node scripts/benchmark.mjs 5 12 200
 ```
 
+The self-play training stack for a self-improving bot (Python + JAX, work in progress) lives in
+[`rl/`](rl/README.md); its design is in [docs/RL_DESIGN.md](docs/RL_DESIGN.md).
+
 ## Publish it on GitHub Pages
 
 1. Push this folder to a GitHub repository.

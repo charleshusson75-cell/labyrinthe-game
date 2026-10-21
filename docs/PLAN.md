@@ -55,6 +55,8 @@ Living checklist. ✅ done · 🟡 partial · ⬜ todo. Design rationale lives i
 - 2026-10-22 — Expert level: 23 automated tests green (5 new for the particle sampler and the
   explorer; the bot-vs-bot protocol test now runs the expert). Browser: level picker shows four levels,
   the expert plays its turns; 5×5 moves take 13 ms median, 47 ms max (budget 150 ms).
+- 2026-10-22 — RL P1 (`rl/`): 248 pytest tests green, 205 of them parity checks against JS fixtures;
+  `npm test` unchanged and green; CI gains a Python job.
 - Not yet tested: two different devices / networks end-to-end, Safari iOS as host.
 
 ## Bot strength and luck (2026-10-21)
@@ -92,7 +94,9 @@ the starter wins ties):
 
 Full design: [RL_DESIGN.md](RL_DESIGN.md); decisions D15–D20 (2026-10-22). Ground truth:
 `research/exact_solve.mjs` (exact equilibrium on 3×3). Revised phases:
-- P1: JAX engine + fixtures + baselines
+- P1: JAX engine + fixtures + baselines ✅ (2026-10-22): `rl/` ([README](../rl/README.md)). Parity green
+  on 203 JS fixtures. Explorer steps/s on one CPU core: 2.5 M on 5×5 (target 10⁵), 0.46 M with the
+  hard planner as policy; 10×10: 0.59 M / 0.11 M. Duplicate-format evaluator in place
 - P2: explorer learning — step 0 ✅ (2026-10-22): no-learning Bayesian explorer shipped as the
   "expert" level ([D21](DECISIONS.md)); the learned explorer now has to beat it
 - P3: league self-play on 5×5

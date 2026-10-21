@@ -1,8 +1,9 @@
 # Toward a self-improving bot — design notes
 
 Status: research plan. Written 2026-10-21, decisions taken 2026-10-22. Implemented so far: the
-exact solver (`research/exact_solve.mjs`), the benchmark (`scripts/benchmark.mjs`), and P2 step 0:
-the no-learning Bayesian explorer, shipped as the "expert" level (§5.1, D21).
+exact solver (`research/exact_solve.mjs`), the benchmark (`scripts/benchmark.mjs`), P1: the
+training stack's foundation in `rl/` (§5.1), and P2 step 0: the no-learning Bayesian explorer,
+shipped as the "expert" level (§5.2, D21).
 
 > **Decisions (2026-10-22, see [DECISIONS.md](DECISIONS.md) D15–D20)**
 > - **Saturation:** walls-hit ≈ W is an artifact of a predictable explorer. We train on walls hit,
@@ -268,8 +269,8 @@ with real players.
 | Phase | Deliverable | Go/no-go |
 |---|---|---|
 | **P0 (done)** | Exact 3×3 solver; bot benchmark; 4×4–10×10 boards in the game | Ground-truth values in §2 |
-| **P1** | `rl/`: JAX engine (any size), lattice encoding, maze samplers, Python ports of today's bots, duplicate-format evaluator, JS→Python parity fixtures in CI | Parity green; ≥ 10⁵ explorer steps/s on 5×5 (CPU) |
-| **P2** | Explorer learning vs fixed designer mixes (random + "hard"), 4×4 → 5×5, with belief head. **Step 0 ✅** (2026-10-22): Bayesian explorer without learning, the "expert" level (§5.1) | Fewer walls hit than the "hard" heuristic on 5×5 (step 0: 5.3 vs 7.8–11.5 of 12); now also fewer than "expert"; ≈ equilibrium values on 3×3 |
+| **P1 ✅** (2026-10-22) | `rl/`: JAX engine (any size), lattice encoding, maze samplers, Python ports of today's bots, duplicate-format evaluator, JS→Python parity fixtures in CI (§5.1) | Parity green; ≥ 10⁵ explorer steps/s on 5×5 (CPU). **Met:** 203 fixtures reproduced exactly; 2.5 M steps/s on 5×5 on one CPU core (0.46 M with the hard planner as policy) |
+| **P2** | Explorer learning vs fixed designer mixes (random + "hard"), 4×4 → 5×5, with belief head. **Step 0 ✅** (2026-10-22): Bayesian explorer without learning, the "expert" level (§5.2) | Fewer walls hit than the "hard" heuristic on 5×5 (step 0: 5.3 vs 7.8–11.5 of 12); now also fewer than "expert"; ≈ equilibrium values on 3×3 |
 | **P3** | Full league self-play on 5×5 (both roles, MMD-regularized PPO, exploiters) | Exploitability falls generation after generation; beats "hard" in duplicate matches |
 | **P4** | Ship the 5×5 bot to the site (ONNX); levels = rating bands of checkpoints | < 50 ms per move in the browser |
 | **P5** | Scale: curriculum to 8×8 / 10×10 on a cloud GPU; re-pick default wall budgets (D15) | Near-equilibrium hits/W well below 1; still improving |
@@ -279,7 +280,56 @@ with real players.
 The race-aware explorer (P6) uses the fact that you know your own maze and watch the opponent's
 progress: you can predict when they'll finish, so optimal play takes more risk when behind.
 
-### 5.1 P2 step 0 — Bayesian explorer without learning (done 2026-10-22)
+### 5.1 P1 — engine, encodings, baselines, evaluation (done 2026-10-22)
+
+`rl/` (Python 3.12 + JAX, CPU); setup, commands and details in [rl/README.md](../rl/README.md).
+
+**What's there.**
+- The rules in JAX for any size, compiled and batched.
+- The (2N+1)² lattice of D17: observation planes, belief target, actions as side pixels.
+- `randomMaze` ported draw for draw, plus a sampler uniform among all valid mazes.
+- Today's bots: ported line by line, and batched in JAX.
+- A duplicate-format evaluator, a throughput benchmark, and a Gymnasium wrapper.
+
+**Parity.** `scripts/export-fixtures.mjs` exports 203 fixtures from the JS engine (sizes 4–10):
+- 6,720 probes, 1,238 of them illegal;
+- 1,135 `rankProbes` snapshots;
+- seeded bot explorations and designs.
+
+Python reproduces all of them exactly. CI checks both sides: the committed fixtures must be what the
+JS produces today, and Python must reproduce them.
+
+**Throughput** (Apple M1; explorer steps/s, one probe in one game, games restarted as they end):
+
+| board | uniform legal probes | hard planner | uniform + lattice observation |
+|---|---|---|---|
+| 5×5, one CPU core | **2.5 M** | 0.46 M | 1.2 M |
+| 5×5, 8 CPU devices | 4.7 M | 1.5 M | |
+| 10×10, one CPU core | 0.59 M | 0.11 M | 0.32 M |
+| 10×10, 8 CPU devices | 1.9 M | 0.48 M | |
+
+**Today's bots in duplicate format** (5×5, 12 walls, 1,000 deals, both seats on each maze pair):
+
+| | explorer edge (walls) | designer edge (walls) | score, both seats | score, round as played |
+|---|---|---|---|---|
+| hard vs normal | +0.33 ± 0.02 | +0.81 ± 0.04 | 59% | 79% |
+| normal vs easy | +1.26 ± 0.04 | +1.68 ± 0.07 | 68% | 88% |
+
+The round scores match the JS benchmark (80% and 86%).
+
+**For P2.**
+- **Swapping seats cancels the designers.** Swapping seats on the same maze pair removes the maze
+  luck and the starter's advantage (D15), but it also cancels the designers exactly. So the duplicate
+  score compares explorers only; designers are read from the designer edge (the same two explorers
+  on both bots' mazes).
+- **CPU performance.** On CPU, gathers inside compiled loops are the bottleneck, not arithmetic.
+  - The planner's BFS runs on row bitmasks.
+  - The lattice is built by reshapes (14× faster).
+  - Rollouts are a work queue of games.
+  The network's forward pass will now dominate the cost per step.
+- **The expert explorer (§5.2) isn't ported to `rl/` yet.** It is the bar P2 must beat.
+
+### 5.2 P2 step 0 — Bayesian explorer without learning (done 2026-10-22)
 
 `src/bot/expert.js`, details and all numbers in [D21](DECISIONS.md).
 
