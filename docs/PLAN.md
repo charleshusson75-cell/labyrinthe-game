@@ -42,7 +42,9 @@ Living checklist. ✅ done · 🟡 partial · ⬜ todo. Design rationale lives i
 - 2026-10-21 — 18 automated tests green. Browser: full bot round + rematch; `?net=local` two-tab round;
   real WebRTC two-tab round through the public PeerJS server with a guest reload mid-game — reconnected
   and verified on both sides.
-- Not yet tested: two different devices / networks (needs the site deployed), Safari iOS, strict NATs.
+- 2026-10-21 — Published on GitHub Pages; CI green. Live site: two-tab online round over WebRTC,
+  guest join screen, fair-play verification ✓.
+- Not yet tested: two different devices / networks, Safari iOS, strict NATs.
 
 ## Bot strength and luck (2026-10-21)
 
