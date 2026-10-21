@@ -5,7 +5,7 @@ import { allEdges, DIRS, edgeKey, isCell, isEdge, neighbor } from './grid.js';
 import { pick, randInt, shuffle } from './random.js';
 
 export const MIN_SIZE = 4;
-export const MAX_SIZE = 8;
+export const MAX_SIZE = 10;
 export const DEFAULT_SIZE = 5;
 export const MIN_WALLS = 1;
 

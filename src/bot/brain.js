@@ -75,7 +75,9 @@ export function simulateSolve(maze, size, level, rng) {
 
 /** A maze for the bot. Harder levels generate candidates and keep the one its own solver hates most. */
 export function designMaze(settings, level, rng) {
-  const candidates = { easy: 1, normal: 6, hard: 30 }[level] ?? 6;
+  // Fewer candidates on big boards, where each simulation costs more: keeps design under ~200 ms.
+  const scale = Math.min(1, 25 / settings.size ** 2);
+  const candidates = Math.max(1, Math.round(({ easy: 1, normal: 6, hard: 30 }[level] ?? 6) * scale));
   let best = null;
   let bestScore = -1;
   for (let i = 0; i < candidates; i++) {

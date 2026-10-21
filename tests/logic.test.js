@@ -39,7 +39,7 @@ test('grid geometry', () => {
 test('settings bounds', () => {
   assert.deepEqual(normalizeSettings({}), { size: 5, walls: 12 });
   assert.equal(defaultWallBudget(5), 12);
-  assert.equal(normalizeSettings({ size: 99 }).size, 8);
+  assert.equal(normalizeSettings({ size: 99 }).size, 10);
   assert.equal(normalizeSettings({ size: 5, walls: 999 }).walls, maxWallBudget(5));
 });
 
@@ -67,7 +67,7 @@ test('shortest path and distances', () => {
 
 test('random mazes are always valid', () => {
   const rng = seededRng(42);
-  for (let size = 4; size <= 8; size++) {
+  for (let size = 4; size <= 10; size++) {
     for (const walls of [1, defaultWallBudget(size), (size - 1) ** 2, maxWallBudget(size)]) {
       for (let i = 0; i < 20; i++) {
         const maze = randomMaze({ size, walls }, rng);
