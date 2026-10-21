@@ -19,6 +19,7 @@ Living checklist. ✅ done · 🟡 partial · ⬜ todo. Design rationale lives i
 ## Milestone 3 — Bot ✅
 - ✅ Maze designer (easy: random · normal: best of 6 · hard: best of 30 by simulated wall hits)
 - ✅ Solver (optimistic planner + noise by difficulty)
+- ✅ Expert explorer: Bayesian search over particle beliefs, counts walls, infers the designer's style ([D21](DECISIONS.md))
 - ✅ Controller (thinking delays, auto-rematch, banter)
 - ✅ Bot-vs-bot test
 
@@ -51,6 +52,9 @@ Living checklist. ✅ done · 🟡 partial · ⬜ todo. Design rationale lives i
   host on school Wi-Fi): the school network blocks WebRTC incl. PeerJS's relay on port 3478 → D14.
   Added `iceServersUrl` support (tested: connects with a relay list, and falls back when the URL is
   broken). Waiting on a TURN provider account.
+- 2026-10-22 — Expert level: 23 automated tests green (5 new for the particle sampler and the
+  explorer; the bot-vs-bot protocol test now runs the expert). Browser: level picker shows four levels,
+  the expert plays its turns; 5×5 moves take 13 ms median, 47 ms max (budget 150 ms).
 - Not yet tested: two different devices / networks end-to-end, Safari iOS as host.
 
 ## Bot strength and luck (2026-10-21)
@@ -72,12 +76,25 @@ the starter wins ties):
   "Loser starts next" balances this over a match, not within a round. Bigger boards fix most of it.
 - Open decision: default board size, or scoring matches as pairs of rounds (each player starts once).
 
+**Expert level (2026-10-22, [D21](DECISIONS.md)).** Walls hit when exploring each designer's mazes
+(`node scripts/benchmark.mjs 4 7 200` / `5 12 200`):
+
+| explorer | 4×4, 7 walls: easy / normal / hard | 5×5, 12 walls: easy / normal / hard |
+|---|---|---|
+| hard | 4.7 / 6.3 / 6.9 | 7.8 / 10.6 / 11.5 |
+| expert | 2.5 / 1.9 / 1.9 | 5.3 / 5.4 / 5.3 |
+
+- Expert beats hard in 100% (4×4) and 99% (5×5) of rounds.
+- Expert vs expert on 5×5: the starter wins 61% and turns are equal 15% of the time (hard vs hard:
+  80% and 55%). A stronger explorer makes rounds less of a coin toss.
+
 ## Next: self-improving bot
 
 Full design: [RL_DESIGN.md](RL_DESIGN.md); decisions D15–D20 (2026-10-22). Ground truth:
 `research/exact_solve.mjs` (exact equilibrium on 3×3). Revised phases:
 - P1: JAX engine + fixtures + baselines
-- P2: explorer learning
+- P2: explorer learning — step 0 ✅ (2026-10-22): no-learning Bayesian explorer shipped as the
+  "expert" level ([D21](DECISIONS.md)); the learned explorer now has to beat it
 - P3: league self-play on 5×5
 - P4: ship
 - P5: scale to 8×8/10×10

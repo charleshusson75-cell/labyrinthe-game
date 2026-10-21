@@ -260,3 +260,77 @@ regularization respectively.
 Version B (adapting to one player) waits until self-play works. When it comes, human behaviour is
 learned **only from real (opt-in) game logs**, never from made-up synthetic players (user decision:
 otherwise not accurate).
+
+## D21 — "Expert" level: a Bayesian explorer without learning (2026-10-22)
+
+**Context.** First concrete step toward the self-improving bot: the no-learning explorer of the
+original roadmap's P2 (now step 0 of P2). The heuristic explorer ignores the wall count and is fully
+exploitable (RL_DESIGN §2, D15).
+
+**Decision.** New level **expert** (`src/bot/expert.js`; it designs like "hard" for now).
+- **Belief = particles:** mazes with exactly W walls, S reachable from E, consistent with every answer
+  so far. Uniform draws come from rejection; tilted ones from Metropolis chains (swap a wall with an
+  unknown open side, keep the maze valid).
+- **Move = one step of policy improvement:** each legal probe is tried on each particle, then a
+  greedy planner finishes the exploration; it costs each unknown side its probability of being a
+  wall. The fewest expected walls hit wins, and clearly worse probes are pruned by paired comparison.
+- **Budget:** 150 ms per move. Measured: 5×5 median 13 ms in the browser (max 47 ms); 10×10
+  median 120 ms (first move up to ~250 ms, while it measures the prior).
+- **Prior over designs (the decisive choice):** weight ∝ exp(β · E→S path length + 0.5 · cells
+  reachable from E), with β ∈ {0 = uniform walls, 1.5 = winding maze}, 1 : 9 a priori. β is inferred
+  during the round: log P(seen | β) is the integral over β of (mean path length of particles that fit
+  what was seen − before any observation).
+
+**Findings.**
+1. **The search is near-optimal.** With a uniform prior it matches the exact Bayes-optimal explorer
+   on 3×3 random walls: 0.57 vs 0.59 (3 walls), 0.73 vs 0.72 (4 walls).
+2. **But the prior is what matters.** With a uniform prior it is *no better than "hard"* on designed
+   mazes (11.6 of 12 walls on 5×5 "hard" mazes). Designed mazes wind: on 5×5 the E→S path is 12–15
+   steps, vs 4.4 for uniform valid mazes, and every cell is reachable. A path-length prior makes the
+   difference.
+3. **The rollout planner must use belief costs.** Optimistic rollouts (unknown side = cost 1) throw
+   the gain away (10.5 of 12). The belief-cost planner alone gets 5.0–5.4, and rollouts add about one
+   wall more. Particle count barely matters past ~100.
+4. **Fixed vs inferred style.** A fixed β = 1.5 is best on designed mazes (4.4 of 12) but loses on
+   uniform-like ones (4.3 vs 1.9 for "hard"). We measured exploitability with an adversarial designer
+   that keeps, each round, the worst of 32 candidates for that explorer (16 from the generator,
+   16 uniform), out of 12 walls on 5×5:
+
+   | explorer | candidates on average | adversarial pick |
+   |---|---|---|
+   | hard | 4.81 | 10.93 |
+   | expert, fixed β = 1.5 | 4.33 | 7.90 |
+   | **expert, inferred β (shipped)** | **3.95** | **7.60** |
+
+   Inferring β costs about 0.7 walls on designed mazes and gains 1.4 on uniform ones, and is the
+   least exploitable option tried.
+
+**Measured** (`node scripts/benchmark.mjs 4 7 200` / `5 12 200`; walls hit when exploring each
+designer's mazes):
+
+| explorer | 4×4, 7 walls: easy / normal / hard mazes | 5×5, 12 walls: easy / normal / hard mazes |
+|---|---|---|
+| hard | 4.7 / 6.3 / 6.9 | 7.8 / 10.6 / 11.5 |
+| **expert** | **2.5 / 1.9 / 1.9** | **5.3 / 5.4 / 5.3** |
+
+- **Head to head:** expert beats hard in 100% of rounds on 4×4 and 99% on 5×5 (same vs normal).
+- **Less luck:** in expert vs expert on 5×5 the starter wins 61% and turns are equal 15% of the time,
+  vs 80% and 55% for hard vs hard.
+- **3×3, best equilibrium subgame:** against the equilibrium designer, expert (as shipped) gets
+  1.49 (3 walls) and 2.15 (4 walls). Hard gets 1.52 and 2.37; the equilibrium values are 1.47–1.51
+  and 1.95–2.04.
+
+**Consequences for the RL plan.**
+- P2's bar moves from "hard" to "expert".
+- The belief head (D17) is in effect a *learned prior over designs*. Train it against a mix of
+  designers (uniform, generator, adversarial), or it inherits the weakness of a fixed prior.
+- It supports D15: an explorer that models designs hits ~44% of W on 5×5 mazes tuned against "hard".
+
+**Known limits.**
+- The β evidence is noisy: MCMC burn-in bias, and the estimate is recomputed from scratch every move.
+  Keeping particles between moves and updating the evidence sequentially (SMC) would fix it and save
+  time.
+- On 3×3 the shipped prior plays badly against uniform random walls (2.08 vs 0.72). A tiny board can't
+  show whether paths wind, and the game starts at 4×4.
+- It is still exploitable (7.6 of 12 under the adversarial pick above). Equilibrium play needs the
+  learned, mixed strategies of P3.

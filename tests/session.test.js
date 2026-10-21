@@ -258,7 +258,7 @@ test('chat goes both ways', async () => {
 test('bot vs bot plays several rounds', async () => {
   const { pipe, host, guest } = setup({ seed: 21 });
   const bots = [
-    createBotController(host, { level: 'hard', rng: seededRng(1), speed: 0 }),
+    createBotController(host, { level: 'expert', rng: seededRng(1), speed: 0 }),
     createBotController(guest, { level: 'easy', rng: seededRng(2), speed: 0 }),
   ];
   for (let i = 0; i < 2000 && host.state.history.length < 3; i++) {

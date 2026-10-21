@@ -6,7 +6,7 @@ the exit of your opponent's maze, one guess at a time. First to reach the other'
 **▶ Play: https://charleshusson75-cell.github.io/labyrinthe-game/**
 
 - 🧑‍🤝‍🧑 **Play a friend online.** Create a game, send the link, each plays on their own screen.
-- 🤖 **Play the computer** (easy / normal / hard).
+- 🤖 **Play the computer** (easy / normal / hard / expert).
 - 🔒 **No peeking, no cheating.** Your maze never leaves your browser during the game, and at the end
   both mazes are checked against a fingerprint locked in before the first move.
 - 🔄 Survives page reloads, Wi-Fi drops and phones going to sleep.
@@ -118,7 +118,7 @@ src/
   i18n.js            English & French strings
   game/              pure rules, no DOM: grid, maze, match (turns, winner, verification), sha256
   net/               session (state + protocol), transports: PeerJS, BroadcastChannel, in-memory pipe
-  bot/               computer player: maze designer, solver, controller
+  bot/               computer player: maze designer, solvers (heuristic; expert = Bayesian search), controller
   app/               routing glue: rooms, saved games & preferences, tab lock
   ui/                screens (home, game), SVG board, sounds, DOM helpers
 tests/               node --test suites

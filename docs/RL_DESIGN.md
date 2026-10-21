@@ -1,7 +1,8 @@
 # Toward a self-improving bot — design notes
 
 Status: research plan. Written 2026-10-21, decisions taken 2026-10-22. Implemented so far: the
-exact solver (`research/exact_solve.mjs`) and the benchmark (`scripts/benchmark.mjs`).
+exact solver (`research/exact_solve.mjs`), the benchmark (`scripts/benchmark.mjs`), and P2 step 0:
+the no-learning Bayesian explorer, shipped as the "expert" level (§5.1, D21).
 
 > **Decisions (2026-10-22, see [DECISIONS.md](DECISIONS.md) D15–D20)**
 > - **Saturation:** walls-hit ≈ W is an artifact of a predictable explorer. We train on walls hit,
@@ -268,7 +269,7 @@ with real players.
 |---|---|---|
 | **P0 (done)** | Exact 3×3 solver; bot benchmark; 4×4–10×10 boards in the game | Ground-truth values in §2 |
 | **P1** | `rl/`: JAX engine (any size), lattice encoding, maze samplers, Python ports of today's bots, duplicate-format evaluator, JS→Python parity fixtures in CI | Parity green; ≥ 10⁵ explorer steps/s on 5×5 (CPU) |
-| **P2** | Explorer learning vs fixed designer mixes (random + "hard"), 4×4 → 5×5, with belief head | Fewer walls hit than the "hard" heuristic on 5×5; ≈ equilibrium values on 3×3 |
+| **P2** | Explorer learning vs fixed designer mixes (random + "hard"), 4×4 → 5×5, with belief head. **Step 0 ✅** (2026-10-22): Bayesian explorer without learning, the "expert" level (§5.1) | Fewer walls hit than the "hard" heuristic on 5×5 (step 0: 5.3 vs 7.8–11.5 of 12); now also fewer than "expert"; ≈ equilibrium values on 3×3 |
 | **P3** | Full league self-play on 5×5 (both roles, MMD-regularized PPO, exploiters) | Exploitability falls generation after generation; beats "hard" in duplicate matches |
 | **P4** | Ship the 5×5 bot to the site (ONNX); levels = rating bands of checkpoints | < 50 ms per move in the browser |
 | **P5** | Scale: curriculum to 8×8 / 10×10 on a cloud GPU; re-pick default wall budgets (D15) | Near-equilibrium hits/W well below 1; still improving |
@@ -277,6 +278,35 @@ with real players.
 
 The race-aware explorer (P6) uses the fact that you know your own maze and watch the opponent's
 progress: you can predict when they'll finish, so optimal play takes more risk when behind.
+
+### 5.1 P2 step 0 — Bayesian explorer without learning (done 2026-10-22)
+
+`src/bot/expert.js`, details and all numbers in [D21](DECISIONS.md).
+
+**How it works.**
+- **Belief:** particles = mazes with exactly W walls, S reachable from E, consistent with every
+  answer. They are sampled by rejection, or by MCMC wall swaps that keep the maze valid.
+- **Move:** one step of policy improvement with Monte-Carlo rollouts of a belief-cost greedy planner.
+- **Prior:** a prior over *designs* that the explorer partly infers during the round.
+
+**What it taught us.**
+
+| | uniform prior | prior over designs (shipped) | "hard" |
+|---|---|---|---|
+| 3×3, random walls (Bayes-optimal: 0.59 / 0.72) | **0.57 / 0.73** | 1.77 / 2.08 | 0.59 / 0.72 |
+| 3×3 vs equilibrium designer (value 1.47–1.51 / 1.95–2.04) | 1.46 / 2.40 | **1.49 / 2.15** | 1.52 / 2.37 |
+| 5×5 "hard" mazes, walls hit of 12 | 11.6 | **5.3** | 11.5 |
+| 5×5 adversarial pick (worst of 32 per round) | — | **7.6** | 10.9 |
+
+(3×3 cells: 3 walls / 4 walls, best equilibrium subgame.)
+
+- **Searching is the easy part; knowing what designs look like is the hard part.**
+  - The search alone is Bayes-optimal on 3×3.
+  - It gains nothing on 5×5 until the prior knows that designed mazes wind.
+- **For P2/P3:** the belief head *is* that prior, so it must be trained against a mix of designers,
+  not one.
+- **The particle sampler** is reusable for P6 (play-time search). Keeping particles between moves
+  (SMC) is the natural next improvement.
 
 ## 6. Open questions
 

@@ -15,6 +15,7 @@
 
 import { allEdges, edgeCells } from '../src/game/grid.js';
 import { simulateSolve } from '../src/bot/brain.js';
+import { EXPERT_DEFAULTS } from '../src/bot/expert.js';
 import { seededRng } from '../src/game/random.js';
 
 const n = Number(process.argv[2]) || 3;
@@ -163,15 +164,27 @@ const symCell = (t, c) => {
 };
 const canonicalPair = (e, s) => Math.min(...[0, 1, 2, 3, 4, 5, 6, 7].map((t) => symCell(t, e) * N + symCell(t, s)));
 
-// ------------------------------------------------------------------ the current heuristic bot
+// ------------------------------------------------------------------ the game's own bots
 
 const toGame = (m) => ({ walls: keys.filter((_, i) => (m.w >> i) & 1), entrance: m.e, exit: m.s });
 const rng = seededRng(7);
-const heuristicHits = (mi) => {
-  let h = 0;
-  for (let k = 0; k < 8; k++) h += simulateSolve(toGame(mazes[mi]), n, 'hard', rng).hits;
-  return h / 8;
-};
+/** Average walls hit by a bot level on maze `mi` (memoized; `expert` = options for the expert level). */
+function botHits(level, runs, expert) {
+  const memo = new Map();
+  return (mi) => {
+    if (!memo.has(mi)) {
+      let h = 0;
+      for (let k = 0; k < runs; k++) h += simulateSolve(toGame(mazes[mi]), n, level, rng, expert).hits;
+      memo.set(mi, h / runs);
+    }
+    return memo.get(mi);
+  };
+}
+const heuristicHits = botHits('hard', 8);
+// Fixed particle counts (no time budget) so the numbers are reproducible.
+const fixed = { budgetMs: Infinity, maxParticles: 200 };
+const expertUniformHits = botHits('expert', 2, { ...fixed, prior: { length: 0, reach: 0 } });
+const expertHits = botHits('expert', 2, { ...fixed, prior: EXPERT_DEFAULTS.prior });
 
 // ------------------------------------------------------------------ equilibrium of each (E, S) subgame
 
@@ -233,8 +246,25 @@ for (const r of solved.slice(0, 5)) {
 const worst = solved[solved.length - 1];
 console.log(`  … worst: E=${label(mazes[worst.group[0]].e)} S=${label(mazes[worst.group[0]].s)}: ${worst.lower.toFixed(2)}\n`);
 console.log(`Game value: ${best.lower.toFixed(2)} … ${best.upper.toFixed(2)} walls hit (max possible ${B}), with E=${label(bestE)}, S=${label(bestS)}\n`);
-console.log('Explorer, in that subgame          vs equilibrium designer   vs its worst maze');
-const row = (name, f) => console.log(`${name.padEnd(34)} ${vsDesigner(f).toFixed(2).padStart(22)} ${worstIn(f).toFixed(2).padStart(19)}`);
+const vsRandom = (hitsOf) => best.group.reduce((acc, mi, j) => acc + hitsOf(mi, j), 0) / best.group.length;
+console.log('Explorer, in that subgame          vs equilibrium designer   vs its worst maze   vs random walls');
+const row = (name, f) =>
+  console.log(`${name.padEnd(34)} ${vsDesigner(f).toFixed(2).padStart(22)} ${worstIn(f).toFixed(2).padStart(19)} ${vsRandom(f).toFixed(2).padStart(17)}`);
 row('current bot ("hard" heuristic)', (mi) => heuristicHits(mi));
+row('expert, uniform prior', (mi) => expertUniformHits(mi));
+row('expert, as shipped', (mi) => expertHits(mi));
 row('Bayes-optimal vs random walls', (mi, j) => uniformBR.hits[j]);
 row('equilibrium explorer (mixed)', (mi, j) => best.avgHits[j]);
+
+// Whole game against uniformly random valid mazes (any E/S): the setting of a uniform-prior explorer.
+const sample = Array.from({ length: Math.min(600, mazes.length) }, () => Math.floor(rng() * mazes.length));
+const optimal = new Map(); // maze → walls hit by the Bayes-optimal explorer for uniform walls in its (E, S) group
+for (const mi of sample) {
+  if (optimal.has(mi)) continue;
+  const group = byES.get(mazes[mi].e * N + mazes[mi].s);
+  const br = bestResponse(group, uniform);
+  group.forEach((m, j) => optimal.set(m, br.hits[j]));
+}
+const avgOver = (f) => (sample.reduce((acc, mi) => acc + f(mi), 0) / sample.length).toFixed(2);
+console.log(`\nAgainst ${sample.length} uniformly random valid mazes (any E/S):`);
+console.log(`  hard ${avgOver(heuristicHits)} · expert, uniform prior ${avgOver(expertUniformHits)} · expert, as shipped ${avgOver(expertHits)} · Bayes-optimal ${avgOver((mi) => optimal.get(mi))}`);
