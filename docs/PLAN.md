@@ -44,6 +44,37 @@ Living checklist. ✅ done · 🟡 partial · ⬜ todo. Design rationale lives i
   and verified on both sides.
 - Not yet tested: two different devices / networks (needs the site deployed), Safari iOS, strict NATs.
 
+## Bot strength and luck (2026-10-21)
+
+Measured with `node scripts/benchmark.mjs` (bot vs bot; a player finishes on turn *walls hit + 1*,
+the starter wins ties):
+
+| | 5×5, 12 walls (default) | 7×7, 27 walls |
+|---|---|---|
+| hard beats normal | 80% | 93% |
+| normal beats easy | 86% | 93% |
+| hard vs hard: rounds won by the starter | **74%** | 51% |
+| hard vs hard: equal number of turns needed | **49%** | 18% |
+
+- Levels are real, but they are hand-tuned settings (randomness + number of candidate mazes), not
+  measured ratings.
+- A wall can't be hit twice, so good designs make the explorer hit nearly every wall (11.6 / 12).
+  On 5×5 between strong players, half the rounds end in equal turns and the starter takes them.
+  "Loser starts next" balances this over a match, not within a round. Bigger boards fix most of it.
+- Open decision: default board size, or scoring matches as pairs of rounds (each player starts once).
+
+## Next: self-improving bot (to discuss)
+
+Goal stated by the user: a bot that gets better by itself, using heavy compute rather than hand
+tuning, since the space of *good* mazes is small. Directions to discuss:
+- Self-play between a designer and an explorer (two-player zero-sum, hidden information), with a
+  population of past versions so neither side overfits the other.
+- Explorer improvements a learner can find: using the known wall count and the E→S connectivity
+  constraint (Bayesian reasoning over possible mazes), and humans' typical wall patterns.
+- Levels defined by measured Elo against frozen reference bots (this benchmark), not hand-set knobs.
+- Where it runs: the JS engine directly (Node), or a Python Gymnasium env in `gym/` sharing test
+  fixtures with the JS rules; ship the result to the browser as small weights / ONNX.
+
 ## Ideas / later
 - Spectator mode
 - Optional turn timer

@@ -3,6 +3,8 @@
 **The pen-and-paper maze duel, online.** Each player secretly draws a maze, then you race to find
 the exit of your opponent's maze, one guess at a time. First to reach the other's **S** wins.
 
+**▶ Play: https://charleshusson75-cell.github.io/labyrinthe-game/**
+
 - 🧑‍🤝‍🧑 **Play a friend online.** Create a game, send the link, each plays on their own screen.
 - 🤖 **Play the computer** (easy / normal / hard).
 - 🔒 **No peeking, no cheating.** Your maze never leaves your browser during the game, and at the end
@@ -49,6 +51,12 @@ Run the tests (rules, protocol, reconnection, cheating detection, bot):
 
 ```bash
 npm test
+```
+
+Measure the bots against each other (win rates, how often the starter wins):
+
+```bash
+node scripts/benchmark.mjs 5 12 200
 ```
 
 ## Publish it on GitHub Pages
