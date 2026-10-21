@@ -1,0 +1,15 @@
+{
+  "name": "labyrinthe",
+  "version": "0.1.0",
+  "description": "The pen-and-paper maze duel, online: design a secret maze, find your friend's exit first.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
