@@ -83,7 +83,7 @@ const en = {
   'status.reclaiming': 'Reopening the room…',
   'status.opening': 'Opening the room…',
   'status.p2pFailed':
-    'Can’t open a direct connection between your two networks. Try another network (a phone hotspot often works), or see the README about TURN servers.',
+    'Can’t connect your two browsers: one of your networks (often school or office Wi-Fi) blocks this kind of connection. The player on that network can switch to mobile data or a phone hotspot.',
   'status.roomBusy': 'Can’t reopen the room: it seems open somewhere else (another tab or device?). Still trying…',
   'status.peerjsLoad': 'Couldn’t load the networking library. Check your connection or ad blocker, then reload.',
   'status.browser': 'Your browser doesn’t support WebRTC, which online games need.',
@@ -271,7 +271,7 @@ const fr = {
   'status.reclaiming': 'Réouverture de la salle…',
   'status.opening': 'Ouverture de la salle…',
   'status.p2pFailed':
-    'Impossible d’établir une connexion directe entre vos deux réseaux. Essaie un autre réseau (un partage de connexion marche souvent), ou lis le README à propos des serveurs TURN.',
+    'Impossible de relier vos deux navigateurs : l’un de vos réseaux (souvent le Wi-Fi d’une école ou d’une entreprise) bloque ce type de connexion. Le joueur sur ce réseau peut passer en 4G/5G ou en partage de connexion.',
   'status.roomBusy': 'Impossible de rouvrir la salle : elle semble ouverte ailleurs (autre onglet ou appareil ?). Nouvelle tentative…',
   'status.peerjsLoad': 'Impossible de charger la bibliothèque réseau. Vérifie ta connexion ou ton bloqueur de pubs, puis recharge.',
   'status.browser': 'Ton navigateur ne gère pas WebRTC, nécessaire pour jouer en ligne.',

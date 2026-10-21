@@ -147,3 +147,23 @@ signaling server confirmed the host's room id wasn't registered: the host's page
 
 **Later option.** A tiny always-on relay/lobby server would let a guest join before the host is
 back, at the cost of hosting (see D2 alternatives).
+
+## D14 — Relay (TURN) on port 443 for school / office networks (2026-10-21)
+
+**Context.** Second real test: the guest got "can't open a direct connection" from both home Wi-Fi
+and a phone hotspot, while the host was on school Wi-Fi. PeerJS already falls back to its own relay,
+but only on port 3478, which such firewalls block.
+
+**Decision.** Support a TURN provider reachable on port 443 (TLS), which looks like normal web
+traffic. `CONFIG.iceServersUrl` points at a URL returning ICE servers (Metered's credentials API
+format, or anything returning `[{urls, username, credential}]`); they're added to the defaults when
+a game opens, and the game falls back silently if the provider is unreachable. Game traffic is tiny
+(a few KB per round), so any free tier is plenty.
+
+**Pending (user).** Pick a provider and create the account: Metered (free plan, API key usable from
+the browser, simplest) or Cloudflare Realtime TURN (1,000 GB free, but credentials must be minted
+server-side, e.g. by a small Worker).
+
+**If that's not enough.** Some networks only allow web traffic through an inspecting proxy; then
+WebRTC fails even with TURN, and the fallback is a WebSocket relay (e.g. a Cloudflare Worker or
+Supabase Realtime) as a second transport.

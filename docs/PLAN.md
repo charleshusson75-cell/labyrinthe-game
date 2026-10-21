@@ -47,7 +47,11 @@ Living checklist. ✅ done · 🟡 partial · ⬜ todo. Design rationale lives i
 - 2026-10-21 — First real remote test (friend in France → Safari): guest stuck on "Waiting for the
   host"; host page was not registered on the signaling server. Fixed per D13; reproduced locally
   (guest first, host reopens from "Your games" → auto-connect ~11 s; host reload → back in 2 s).
-- Not yet tested: two different devices / networks end-to-end, Safari iOS as host, strict NATs.
+- 2026-10-21 — Retry: host online, but the connection fails (guest on home Wi-Fi and on a hotspot,
+  host on school Wi-Fi): the school network blocks WebRTC incl. PeerJS's relay on port 3478 → D14.
+  Added `iceServersUrl` support (tested: connects with a relay list, and falls back when the URL is
+  broken). Waiting on a TURN provider account.
+- Not yet tested: two different devices / networks end-to-end, Safari iOS as host.
 
 ## Bot strength and luck (2026-10-21)
 

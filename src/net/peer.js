@@ -26,12 +26,34 @@ function loadPeerJS() {
 
 export const hostPeerId = (roomCode) => CONFIG.peerIdPrefix + roomCode;
 
+// PeerJS's own defaults, spelled out because passing `config` replaces them.
+const DEFAULT_ICE = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
+];
+
+/** Peer options, plus relay servers from `CONFIG.iceServersUrl` when configured (best effort). */
+async function peerOptions() {
+  const base = CONFIG.peerOptions;
+  if (!CONFIG.iceServersUrl || base.config?.iceServers) return base;
+  try {
+    const res = await fetch(CONFIG.iceServersUrl, { signal: AbortSignal.timeout(5000) });
+    const data = await res.json();
+    const extra = [].concat(Array.isArray(data) ? data : data.iceServers).filter((s) => s?.urls);
+    if (!extra.length) return base;
+    return { ...base, config: { ...base.config, iceServers: [...DEFAULT_ICE, ...extra] } };
+  } catch {
+    return base; // relay provider down or misconfigured: direct connections still work
+  }
+}
+
 const DIAL_TIMEOUT = 15000;
 const WATCHDOG_EVERY = 10000;
 
 export function createPeerTransport({ role, roomCode }) {
   let handlers = null;
   let peer = null;
+  let options = CONFIG.peerOptions;
   let destroyed = false;
   let restart = null; // builds a fresh Peer for this role
   let restartTimer = null;
@@ -61,7 +83,7 @@ export function createPeerTransport({ role, roomCode }) {
   /** Shared Peer lifecycle: create, keep the signaling link alive, report status. */
   function makePeer(id, { onReady, onError }) {
     handlers.onStatus('starting');
-    const p = id ? new globalThis.Peer(id, CONFIG.peerOptions) : new globalThis.Peer(CONFIG.peerOptions);
+    const p = id ? new globalThis.Peer(id, options) : new globalThis.Peer(options);
     let opened = false;
     peer = p;
     p.on('open', () => {
@@ -226,9 +248,10 @@ export function createPeerTransport({ role, roomCode }) {
   const api = {
     start(h) {
       handlers = h;
-      loadPeerJS()
-        .then(() => {
+      Promise.all([loadPeerJS(), peerOptions()])
+        .then(([, opts]) => {
           if (destroyed) return;
+          options = opts;
           if (role === 'host') startHost();
           else startGuest();
           document.addEventListener('visibilitychange', onVisible);

@@ -10,10 +10,13 @@ export const CONFIG = {
 
   // Options passed to `new Peer(id, options)`. Empty = free public PeerJS cloud server.
   // Self-hosted example: { host: 'peer.example.com', port: 443, path: '/', secure: true }
-  // To help players behind strict NATs, add a TURN server:
-  //   config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' },
-  //                          { urls: 'turn:turn.example.com:3478', username: 'u', credential: 'p' }] }
   peerOptions: {
     debug: 1,
   },
+
+  // Relay (TURN) servers for networks that block direct connections, e.g. school or office Wi-Fi.
+  // URL returning ICE servers as JSON (an array, or { iceServers }), fetched when a game opens and
+  // added to the defaults. Metered (free plan): https://<your-app>.metered.live/api/v1/turn/credentials?apiKey=<key>
+  // Leave empty to use only the defaults (Google STUN + PeerJS's relay on port 3478).
+  iceServersUrl: '',
 };

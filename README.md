@@ -100,8 +100,10 @@ Most home networks are fine. Some strict networks (corporate Wi-Fi, some mobile 
 direct WebRTC connections; the game then shows a hint after a few seconds. Fixes:
 
 - try another network (a phone hotspot usually works), or
-- add a **TURN** relay server in [`src/config.js`](src/config.js) (`peerOptions.config.iceServers`).
-  Free tiers exist (e.g. Metered, Cloudflare Calls) or you can run [coturn](https://github.com/coturn/coturn).
+- configure a **TURN relay on port 443** in [`src/config.js`](src/config.js): set `iceServersUrl` to
+  your provider's credentials URL (e.g. Metered's free plan:
+  `https://<your-app>.metered.live/api/v1/turn/credentials?apiKey=<key>`), or put servers directly in
+  `peerOptions.config.iceServers`. You can also run [coturn](https://github.com/coturn/coturn).
 
 You can also self-host the signaling server (`npx peerjs --port 9000`) and point `peerOptions` at it.
 
