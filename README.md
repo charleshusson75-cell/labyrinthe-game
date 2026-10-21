@@ -92,7 +92,8 @@ The CI workflow (`.github/workflows/ci.yml`) runs the tests on every push and pu
   dropped connection or a page reload just resumes. Game state is saved in `localStorage`.
 
 Details: [docs/PROTOCOL.md](docs/PROTOCOL.md) · design choices: [docs/DECISIONS.md](docs/DECISIONS.md) ·
-roadmap: [docs/PLAN.md](docs/PLAN.md).
+roadmap: [docs/PLAN.md](docs/PLAN.md) · self-improving bot (research plan):
+[docs/RL_DESIGN.md](docs/RL_DESIGN.md).
 
 ### If players can't connect
 
@@ -121,6 +122,7 @@ src/
   app/               routing glue: rooms, saved games & preferences, tab lock
   ui/                screens (home, game), SVG board, sounds, DOM helpers
 tests/               node --test suites
+research/            exact_solve.mjs: exact equilibrium on 3×3 boards (ground truth for the RL work)
 scripts/serve.mjs    zero-dependency dev server
 docs/                decisions, plan, protocol
 ```

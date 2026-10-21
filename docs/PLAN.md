@@ -72,17 +72,11 @@ the starter wins ties):
   "Loser starts next" balances this over a match, not within a round. Bigger boards fix most of it.
 - Open decision: default board size, or scoring matches as pairs of rounds (each player starts once).
 
-## Next: self-improving bot (to discuss)
+## Next: self-improving bot
 
-Goal stated by the user: a bot that gets better by itself, using heavy compute rather than hand
-tuning, since the space of *good* mazes is small. Directions to discuss:
-- Self-play between a designer and an explorer (two-player zero-sum, hidden information), with a
-  population of past versions so neither side overfits the other.
-- Explorer improvements a learner can find: using the known wall count and the E→S connectivity
-  constraint (Bayesian reasoning over possible mazes), and humans' typical wall patterns.
-- Levels defined by measured Elo against frozen reference bots (this benchmark), not hand-set knobs.
-- Where it runs: the JS engine directly (Node), or a Python Gymnasium env in `gym/` sharing test
-  fixtures with the JS rules; ship the result to the browser as small weights / ONNX.
+Full design: [RL_DESIGN.md](RL_DESIGN.md). Ground truth: `research/exact_solve.mjs` (exact equilibrium
+on 3×3). Phases P1–P6 there: fast simulator with shared fixtures → Bayesian explorer → PSRO
+self-play → ship checkpoints as rated levels → per-player adaptation.
 
 ## Ideas / later
 - Spectator mode
