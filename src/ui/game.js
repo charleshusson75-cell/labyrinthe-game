@@ -104,11 +104,13 @@ export function mountGame(root, { session, kind, inviteUrl, botLevel }) {
     }
     if (live.peerOnline) return null;
     if (code === 'p2p-failed') return { tone: 'warn', text: t('status.p2pFailed') };
+    if (code === 'room-busy') return { tone: 'warn', text: t('status.roomBusy') };
     if (code === 'network' || code === 'reclaiming') return { tone: 'wait', text: t(`status.${code}`) };
     if (seat() === 'guest') {
       if (code === 'host-offline') return { tone: 'wait', text: t('status.hostOffline', { name: s().names.host || t('status.theHost') }) };
       return { tone: 'wait', text: t(code === 'slow' ? 'status.slow' : 'status.connecting') };
     }
+    if (kind === 'online' && live.link !== 'ready') return { tone: 'wait', text: t('status.opening') };
     if (s().joined) return { tone: 'warn', text: t('status.oppOffline', { name: theirName() }) };
     return null;
   }

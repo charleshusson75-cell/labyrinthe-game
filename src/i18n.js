@@ -70,18 +70,21 @@ const en = {
   'game.share': 'Share…',
   'invite.title': 'Invite your opponent:',
   'invite.desc': 'send them this link.',
-  'invite.meanwhile': 'Meanwhile, start drawing your maze. It stays secret.',
+  'invite.meanwhile':
+    '<b>Keep this page open</b>: the game lives in your browser, so your friend can only join while it’s open. On a phone, come back to this tab right after sending the link. Meanwhile, start drawing your maze.',
   'invite.shareText': 'Come and play Labyrinthe with me!',
 
   'status.connecting': 'Connecting to the game…',
   'status.slow': 'Still trying to connect…',
-  'status.hostOffline': 'Waiting for {name} to come online…',
+  'status.hostOffline':
+    'Waiting for {name}… Their game page must be open for you to join. If they closed it, they can reopen it from “Your games” on the home page; you’ll connect automatically.',
   'status.theHost': 'the host',
   'status.network': 'Lost the connection to the server, retrying…',
   'status.reclaiming': 'Reopening the room…',
+  'status.opening': 'Opening the room…',
   'status.p2pFailed':
     'Can’t open a direct connection between your two networks. Try another network (a phone hotspot often works), or see the README about TURN servers.',
-  'status.roomBusy': 'This room is already open somewhere else (another tab or device?).',
+  'status.roomBusy': 'Can’t reopen the room: it seems open somewhere else (another tab or device?). Still trying…',
   'status.peerjsLoad': 'Couldn’t load the networking library. Check your connection or ad blocker, then reload.',
   'status.browser': 'Your browser doesn’t support WebRTC, which online games need.',
   'status.version': 'You and your opponent run different versions of the game. Both of you, reload the page.',
@@ -255,18 +258,21 @@ const fr = {
   'game.share': 'Partager…',
   'invite.title': 'Invite ton adversaire :',
   'invite.desc': 'envoie-lui ce lien.',
-  'invite.meanwhile': 'En attendant, commence à dessiner ton labyrinthe. Il reste secret.',
+  'invite.meanwhile':
+    '<b>Garde cette page ouverte</b> : la partie vit dans ton navigateur, ton ami ne peut la rejoindre que si elle est ouverte. Sur téléphone, reviens sur cet onglet juste après avoir envoyé le lien. En attendant, commence à dessiner ton labyrinthe.',
   'invite.shareText': 'Viens jouer au Labyrinthe avec moi !',
 
   'status.connecting': 'Connexion à la partie…',
   'status.slow': 'Connexion toujours en cours…',
-  'status.hostOffline': 'En attente de {name}…',
+  'status.hostOffline':
+    'En attente de {name}… Sa page de jeu doit être ouverte pour que tu puisses rejoindre. S’il l’a fermée, il peut la rouvrir depuis « Tes parties » sur la page d’accueil ; la connexion se fera toute seule.',
   'status.theHost': 'l’hôte',
   'status.network': 'Connexion au serveur perdue, nouvelle tentative…',
   'status.reclaiming': 'Réouverture de la salle…',
+  'status.opening': 'Ouverture de la salle…',
   'status.p2pFailed':
     'Impossible d’établir une connexion directe entre vos deux réseaux. Essaie un autre réseau (un partage de connexion marche souvent), ou lis le README à propos des serveurs TURN.',
-  'status.roomBusy': 'Cette salle est déjà ouverte ailleurs (autre onglet ou appareil ?).',
+  'status.roomBusy': 'Impossible de rouvrir la salle : elle semble ouverte ailleurs (autre onglet ou appareil ?). Nouvelle tentative…',
   'status.peerjsLoad': 'Impossible de charger la bibliothèque réseau. Vérifie ta connexion ou ton bloqueur de pubs, puis recharge.',
   'status.browser': 'Ton navigateur ne gère pas WebRTC, nécessaire pour jouer en ligne.',
   'status.version': 'Vous n’avez pas la même version du jeu. Rechargez la page tous les deux.',

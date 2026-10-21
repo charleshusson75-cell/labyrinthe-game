@@ -44,7 +44,10 @@ Living checklist. ✅ done · 🟡 partial · ⬜ todo. Design rationale lives i
   and verified on both sides.
 - 2026-10-21 — Published on GitHub Pages; CI green. Live site: two-tab online round over WebRTC,
   guest join screen, fair-play verification ✓.
-- Not yet tested: two different devices / networks, Safari iOS, strict NATs.
+- 2026-10-21 — First real remote test (friend in France → Safari): guest stuck on "Waiting for the
+  host"; host page was not registered on the signaling server. Fixed per D13; reproduced locally
+  (guest first, host reopens from "Your games" → auto-connect ~11 s; host reload → back in 2 s).
+- Not yet tested: two different devices / networks end-to-end, Safari iOS as host, strict NATs.
 
 ## Bot strength and luck (2026-10-21)
 

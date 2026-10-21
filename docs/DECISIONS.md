@@ -130,3 +130,20 @@ reconnect.
 **Decision.** The generator builds a perfect maze, places E/S far apart, then knocks down walls to
 reach the budget, skipping walls whose removal would shorten the E→S path (used only as a last
 resort). Found in play-testing: a random maze had S right next to E with a direct opening possible.
+
+## D13 — The host's page must stay open; reconnect as soon as it wakes up (2026-10-21)
+
+**Context.** First real game: the guest's link showed "Waiting for the host". A probe of the
+signaling server confirmed the host's room id wasn't registered: the host's page had gone away
+(most likely: on a phone, switching to a messaging app to send the link suspends the page).
+
+**Decision.** Without a server this is inherent to D2 (the game lives in the host's browser), so:
+- the invite card tells the host to keep the page open and come back to it after sending the link;
+- the guest's waiting message explains it, and that the host can reopen the game from "Your games";
+- the PeerJS transport reconnects immediately when the page becomes visible again, when the
+  network returns, and from a 10 s watchdog, instead of relying only on timers (which phones pause);
+- the host keeps trying to reclaim its room id forever (the server can hold a dead registration
+  for up to ~60 s); after a minute it says so but keeps trying.
+
+**Later option.** A tiny always-on relay/lobby server would let a guest join before the host is
+back, at the cost of hosting (see D2 alternatives).

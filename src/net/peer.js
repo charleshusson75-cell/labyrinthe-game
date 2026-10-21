@@ -27,11 +27,15 @@ function loadPeerJS() {
 export const hostPeerId = (roomCode) => CONFIG.peerIdPrefix + roomCode;
 
 const DIAL_TIMEOUT = 15000;
+const WATCHDOG_EVERY = 10000;
 
 export function createPeerTransport({ role, roomCode }) {
   let handlers = null;
   let peer = null;
   let destroyed = false;
+  let restart = null; // builds a fresh Peer for this role
+  let restartTimer = null;
+  let onWake = null; // role-specific extra work when the page wakes up
   const timers = new Set();
 
   const later = (fn, ms) => {
@@ -46,8 +50,15 @@ export function createPeerTransport({ role, roomCode }) {
     clearTimeout(id);
     timers.delete(id);
   };
+  const scheduleRestart = (ms) => {
+    cancel(restartTimer);
+    restartTimer = later(() => {
+      restartTimer = null;
+      restart();
+    }, ms);
+  };
 
-  /** Shared Peer lifecycle: (re)create, keep the signaling link alive, report status. */
+  /** Shared Peer lifecycle: create, keep the signaling link alive, report status. */
   function makePeer(id, { onReady, onError }) {
     handlers.onStatus('starting');
     const p = id ? new globalThis.Peer(id, CONFIG.peerOptions) : new globalThis.Peer(CONFIG.peerOptions);
@@ -58,7 +69,8 @@ export function createPeerTransport({ role, roomCode }) {
       onReady(p);
     });
     p.on('disconnected', () => {
-      // Lost the signaling server; open data connections keep working meanwhile.
+      // Lost the signaling server (network drop, phone put the page to sleep…).
+      // Open data connections keep working meanwhile.
       if (destroyed || p.destroyed) return;
       handlers.onStatus('starting', { code: 'network' });
       later(() => !p.destroyed && p.disconnected && p.reconnect(), 2000);
@@ -72,11 +84,26 @@ export function createPeerTransport({ role, roomCode }) {
       if (!opened && !p.destroyed) {
         p.destroy();
         handlers.onStatus('starting', { code: 'network' });
-        later(() => makePeer(id, { onReady, onError }), 3000);
+        scheduleRestart(3000);
       }
     });
     return p;
   }
+
+  /**
+   * Called when the page comes back to the foreground, the network returns, or by the watchdog:
+   * phones suspend background pages and kill their connections, so don't wait for timers.
+   */
+  function wake() {
+    if (destroyed || !restart) return;
+    if (!peer || peer.destroyed) {
+      if (!restartTimer) restart();
+    } else if (peer.disconnected) {
+      peer.reconnect();
+    }
+    onWake?.();
+  }
+  const onVisible = () => document.visibilityState === 'visible' && wake();
 
   // ---------------------------------------------------------------- host
 
@@ -102,16 +129,17 @@ export function createPeerTransport({ role, roomCode }) {
     };
     const onError = (err, p) => {
       if (err.type !== 'unavailable-id') return false;
-      // Our id is still held by the server (we just reloaded) or by another tab/device.
+      // Our id is still held by the server: our previous connection hasn't timed out yet (page
+      // reloaded or woke up), or the room is open on another device. Keep trying; after a minute,
+      // say so.
       p.destroy();
-      if (++idAttempts > 15) handlers.onStatus('error', { code: 'room-busy' });
-      else {
-        handlers.onStatus('starting', { code: 'reclaiming' });
-        later(() => makePeer(hostPeerId(roomCode), { onReady, onError }), 2000);
-      }
+      idAttempts++;
+      handlers.onStatus('starting', { code: idAttempts > 20 ? 'room-busy' : 'reclaiming' });
+      scheduleRestart(idAttempts > 20 ? 5000 : 3000);
       return true;
     };
-    makePeer(hostPeerId(roomCode), { onReady, onError });
+    restart = () => makePeer(hostPeerId(roomCode), { onReady, onError });
+    restart();
   }
 
   // ---------------------------------------------------------------- guest
@@ -172,22 +200,27 @@ export function createPeerTransport({ role, roomCode }) {
       dropConn();
       scheduleDial(500);
     };
+    onWake = () => {
+      if (!conn) scheduleDial(0); // not connected nor dialing: knock right away
+    };
 
-    makePeer(null, {
-      onReady: () => {
-        handlers.onStatus('ready');
-        if (!conn) scheduleDial(0);
-      },
-      onError: (err) => {
-        if (err.type !== 'peer-unavailable') return false;
-        // Host not online (yet / anymore). Keep knocking.
-        conn = null;
-        cancel(openTimer);
-        handlers.onStatus('ready', { code: 'host-offline' });
-        scheduleDial(4000);
-        return true;
-      },
-    });
+    restart = () =>
+      makePeer(null, {
+        onReady: () => {
+          handlers.onStatus('ready');
+          if (!conn) scheduleDial(0);
+        },
+        onError: (err) => {
+          if (err.type !== 'peer-unavailable') return false;
+          // Host not online (yet / anymore). Keep knocking.
+          conn = null;
+          cancel(openTimer);
+          handlers.onStatus('ready', { code: 'host-offline' });
+          scheduleDial(4000);
+          return true;
+        },
+      });
+    restart();
   }
 
   const api = {
@@ -198,6 +231,11 @@ export function createPeerTransport({ role, roomCode }) {
           if (destroyed) return;
           if (role === 'host') startHost();
           else startGuest();
+          document.addEventListener('visibilitychange', onVisible);
+          window.addEventListener('online', wake);
+          window.addEventListener('pageshow', wake);
+          const watchdog = setInterval(() => document.visibilityState === 'visible' && wake(), WATCHDOG_EVERY);
+          timers.add(watchdog);
         })
         .catch(() => handlers.onStatus('error', { code: 'peerjs-load' }));
     },
@@ -205,8 +243,14 @@ export function createPeerTransport({ role, roomCode }) {
     reset() {},
     destroy() {
       destroyed = true;
-      timers.forEach(clearTimeout);
+      timers.forEach((id) => {
+        clearTimeout(id);
+        clearInterval(id);
+      });
       timers.clear();
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', wake);
+      window.removeEventListener('pageshow', wake);
       peer?.destroy();
     },
   };
