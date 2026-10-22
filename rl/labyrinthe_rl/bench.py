@@ -2,7 +2,7 @@
 
     python -m labyrinthe_rl.bench [--size 5] [--walls W] [--deals 500] [--seed 0]
                                   [--pairs hard:easy,hard:normal,normal:easy,hard:hard]
-                                  [--mazes bots|random|uniform]
+                                  [--mazes bots|random|uniform] [--particles 200]
 
 Each deal is a pair of mazes (a, b): designed by bots A and B (`--mazes bots`, as in a real round),
 or dealt by a sampler. Both bots explore both mazes, i.e. play both seats:
@@ -12,6 +12,9 @@ A player finishes on turn (walls hit + 1) and the starter wins ties, so with eac
 a seat is worth 1 to whoever hit fewer walls and ½ each when equal: a score that doesn't depend on
 who starts. Explorations of the same maze share their random key, and each bot's mazes are made
 once and reused in every pairing.
+
+Bots: easy, normal, hard (src/bot/brain.js, batched in planner.py) and expert (src/bot/expert.js run
+by Node, see expert.py; it designs like hard, as in the game).
 
 Columns, per pairing A:B:
     hits A, hits B    walls hit as explorer (mean over both seats) and as a share of the budget W
@@ -29,7 +32,7 @@ from typing import Callable
 import jax
 import numpy as np
 
-from . import planner
+from . import expert, planner
 from .geometry import default_wall_budget, max_wall_budget
 from .mazes import sample_mazes
 
@@ -52,7 +55,17 @@ def heuristic(level: str) -> Bot:
     )
 
 
+def expert_bot(particles: int = expert.PARTICLES) -> Bot:
+    """The expert level (src/bot/expert.js, D21): hard's designer, the Bayesian explorer through Node."""
+    return Bot(
+        name="expert",
+        design=BOTS["hard"].design,
+        explore=lambda w, e, s, key: expert.explore_mazes(w, e, s, key, particles),
+    )
+
+
 BOTS = {level: heuristic(level) for level in planner.LEVEL_INDEX}
+BOTS["expert"] = expert_bot()
 
 
 def seat_score(mine, theirs) -> np.ndarray:
@@ -150,7 +163,12 @@ def main(argv=None):
     ap.add_argument("--pairs", default="hard:easy,hard:normal,normal:easy,hard:hard")
     ap.add_argument("--mazes", default="bots", choices=["bots", "random", "uniform"])
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--particles", type=int, default=expert.PARTICLES, help="particles of the expert explorer")
     args = ap.parse_args(argv)
+    bots = {**BOTS, "expert": expert_bot(args.particles)}
+    pairs = [tuple(pair.split(":")) for pair in args.pairs.split(",")]
+    if any(len(p) != 2 or not set(p) <= bots.keys() for p in pairs):
+        ap.error(f"--pairs is a list of A:B, with bots among {', '.join(bots)}")
     walls = args.walls or default_wall_budget(args.size)
     if not 1 <= walls <= max_wall_budget(args.size):
         ap.error(f"walls must be 1..{max_wall_budget(args.size)} on a {args.size}×{args.size} board")
@@ -159,9 +177,8 @@ def main(argv=None):
     deals = Deals(args.size, walls, args.deals, args.mazes, args.seed)
     results = {}
     t0 = time.perf_counter()
-    for pair in args.pairs.split(","):
-        na, nb = pair.split(":")
-        results[(na, nb)] = duplicate_match(BOTS[na], BOTS[nb], deals)
+    for na, nb in pairs:
+        results[(na, nb)] = duplicate_match(bots[na], bots[nb], deals)
     print(report(results, walls, args.mazes))
     print(f"\n({time.perf_counter() - t0:.1f} s)")
 

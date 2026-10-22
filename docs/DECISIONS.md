@@ -334,3 +334,34 @@ designer's mazes):
   show whether paths wind, and the game starts at 4×4.
 - It is still exploitable (7.6 of 12 under the adversarial pick above). Equilibrium play needs the
   learned, mixed strategies of P3.
+
+## D22 — The expert in the Python evaluator: a Node bridge, not a port (2026-10-22)
+
+**Context.** P2 measures learned explorers in `rl/`'s duplicate-format evaluator (`bench`), and its
+bar is now the expert (D21), which only exists in JavaScript.
+
+**Decision.** The bench bot `expert` runs `src/bot/expert.js` itself, in Node:
+`rl/labyrinthe_rl/expert.py` sends mazes as JSON to `scripts/expert-solve.mjs`, which answers with the
+walls hit on each. It designs like "hard", as in the game.
+- **Fixed particle count** (200, as `scripts/benchmark.mjs` used for D21) instead of the time budget,
+  so results don't depend on the machine. Each maze's seed comes from the bench's JAX key.
+- **A fresh copy of expert.js per maze** (re-imported under a new URL). expert.js caches the
+  unconditioned mean path length per (E, S), drawn with the caller's rng. In a shared copy, a maze's
+  result depended on the mazes explored before it with the same E and S. A fresh copy costs ≈ 5%.
+- **One Node process per CPU core**, each on a slice of the mazes. Thanks to the fresh copies,
+  results don't depend on the split (tested).
+
+**Alternatives considered.** A numpy port of the belief sampler and rollout policy. Per maze it
+would be slower than V8, unless batched in JAX: a big job, with its own parity risk, and two copies
+of the expert to keep in sync. The bridge is fast enough: about 0.16 s per 5×5 exploration on one
+core.
+
+**Measured** (`bench --deals 1000`, 5×5, 12 walls, Apple M1): expert vs hard, expert 5.29 walls
+(0.44 W), hard 11.54. In the round as played the expert hits fewer walls 99.7% of the time (equal
+0.2%). Expert vs expert is exactly even. This matches D21 (5.3 of 12 on hard's mazes, 99% of rounds
+won). 1,000 deals of expert vs hard take 2 minutes (8 Node processes).
+
+**Consequences.**
+- `bench` needs `node` on the PATH for the expert (CI has it). Its pytest is skipped without it.
+- If P2 needs the expert inside training (as a teacher or a rollout policy), a JAX port becomes worth
+  it then.

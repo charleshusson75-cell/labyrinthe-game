@@ -1,7 +1,7 @@
 # rl/: the self-play training stack
 
 Python + JAX tooling for a self-improving Labyrinthe bot ([design](../docs/RL_DESIGN.md), decisions
-D15–D20 in [DECISIONS.md](../docs/DECISIONS.md)). This is **phase P1**: the game engine, encodings,
+D15–D22 in [DECISIONS.md](../docs/DECISIONS.md)). This is **phase P1**: the game engine, encodings,
 maze samplers, today's bots and the evaluator. Nothing learns yet; P2 (explorer learning) builds on
 these pieces.
 
@@ -10,7 +10,8 @@ tests here must reproduce it exactly.
 
 ## Setup
 
-Python 3.12, CPU only (no GPU needed for 4×4/5×5).
+Python 3.12, CPU only (no GPU needed for 4×4/5×5). Node.js (≥ 18, as for the game) too: it
+exports the fixtures, and the evaluator runs the expert bot in it.
 
 ```bash
 python3.12 -m venv rl/.venv
@@ -30,6 +31,10 @@ rl/.venv/bin/python -m labyrinthe_rl.bench --size 5 --deals 1000
 ```
 
 ```bash
+rl/.venv/bin/python -m labyrinthe_rl.bench --size 5 --deals 1000 --pairs expert:hard
+```
+
+```bash
 rl/.venv/bin/python -m labyrinthe_rl.throughput --sizes 5,10
 ```
 
@@ -39,7 +44,8 @@ node scripts/export-fixtures.mjs
 
 - `pytest rl`: parity with the JS engine plus unit tests (about a minute).
 - `bench`: duplicate-format evaluation of two bots. Options: `--pairs hard:normal,...`,
-  `--mazes bots|random|uniform`, `--walls`, `--seed`.
+  `--mazes bots|random|uniform`, `--walls`, `--seed`. Bots: `easy`, `normal`, `hard`, and `expert`
+  (P2's bar, run by Node; `--particles`, default 200).
 - `throughput`: batched explorer steps/s on this machine. Options: `--obs` also computes the lattice
   observation, `--devices 8` splits the batch over 8 CPU devices.
 - `export-fixtures.mjs`: regenerates `rl/tests/fixtures/` after a change to the JS rules or bots;
@@ -57,6 +63,7 @@ node scripts/export-fixtures.mjs
 | `baselines.py` | today's bots ported line by line from `src/bot/brain.js` (planner explorer and easy/normal/hard designers). Same moves as the JS for the same seed |
 | `planner.py` | the same bots batched in JAX (same decisions, JAX randomness): `choose`, `explore_mazes` (a work queue of games), `design` |
 | `bench.py` | duplicate-format evaluator |
+| `expert.py` | the expert explorer (`src/bot/expert.js`, D21) as a bench bot, run by Node through `scripts/expert-solve.mjs`. Not ported: see below |
 | `throughput.py` | steps/s benchmark |
 | `env.py` | a Gymnasium wrapper (`Labyrinthe-Explorer-v0`) for standard tooling. Training will use the batched functions directly |
 
@@ -101,6 +108,20 @@ both mazes, so each plays both seats on the same pair:
   starts once.
 - **Score (round)** is the same on the round as played: A explores b, B explores a.
 - **Explorer edge** and **designer edge** split the difference in walls hit between the two roles.
+
+### The expert bot (`expert.py`)
+
+The expert explorer is not ported: `bench` runs `src/bot/expert.js` itself, in Node ([D22](../docs/DECISIONS.md)).
+`scripts/expert-solve.mjs` reads mazes as JSON on stdin and writes the walls hit on each:
+- a fixed particle count (`--particles`, default 200) replaces the 150 ms time budget, so results
+  don't depend on the machine;
+- each maze's seed comes from the bench's JAX key, and each maze gets a fresh copy of expert.js. Its
+  results don't depend on which mazes a Node process explored before;
+- one Node process per CPU core; about 0.16 s per 5×5 exploration on one core.
+
+`expert.explore_mazes(walls, entrance, exit, key, particles=200, workers=None, options=None)` takes
+the same stacked mazes as the planner. `options` go to expert.js as they are, e.g.
+`{"search": "greedy"}`.
 
 ## Parity with the JS engine
 
@@ -150,6 +171,18 @@ Today's bots in duplicate format (`bench --deals 1000`, 5×5, 12 walls, mazes de
 The round scores match the JS benchmark (`scripts/benchmark.mjs`: hard beats normal 80%, normal
 beats easy 86%), a check on the ports. The run takes about 15 s.
 
+The expert, P2's bar (`--pairs expert:hard,expert:normal,expert:expert`, 1,000 deals):
+
+| pairing | hits A | hits B | explorer edge | designer edge | score (dup) | score (round) |
+|---|---|---|---|---|---|---|
+| expert vs hard | 5.29 (0.44 W) | 11.54 (0.96 W) | +6.25 ± 0.05 | −0.01 ± 0.05 | 100% | 100% |
+| expert vs normal | 5.31 (0.44 W) | 11.38 (0.95 W) | +6.06 ± 0.05 | +0.28 ± 0.05 | 99% | 100% |
+| expert vs expert | 5.29 (0.44 W) | 5.29 (0.44 W) | 0 | −0.02 ± 0.09 | 50% | 48% ± 1 |
+
+In the round as played the expert hits fewer walls than hard 99.7% of the time (equal 0.2%), as in
+D21 (5.3 of 12 walls on hard's mazes, beats hard in 99% of rounds). The expert designs like hard, so
+the designer edge against hard is ≈ 0. Expert vs hard takes 2 minutes.
+
 ## Notes for P2
 
 - **On CPU, XLA is fast at elementwise work and slow at gathers inside loops.**
@@ -160,4 +193,5 @@ beats easy 86%), a check on the ports. The run takes about 15 s.
   next maze, instead of the batch waiting for its slowest game (2.5× faster on 5×5).
 - **Swapping seats on the same maze pair cancels the designers exactly.** So "score (dup)" compares
   explorers only; compare designers with the designer edge and the round score.
-- **The "expert" explorer** (`src/bot/expert.js`, D21) is not ported here yet. It's P2's bar.
+- **The "expert" explorer** (`src/bot/expert.js`, D21) is P2's bar. `bench` plays it through Node
+  (D22), which is fine for evaluation but too slow for training loops.

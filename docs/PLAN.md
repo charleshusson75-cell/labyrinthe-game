@@ -57,6 +57,8 @@ Living checklist. ✅ done · 🟡 partial · ⬜ todo. Design rationale lives i
   the expert plays its turns; 5×5 moves take 13 ms median, 47 ms max (budget 150 ms).
 - 2026-10-22 — RL P1 (`rl/`): 248 pytest tests green, 205 of them parity checks against JS fixtures;
   `npm test` unchanged and green; CI gains a Python job.
+- 2026-10-22 — Expert in `bench` (D22): 251 pytest tests green (3 new, skipped without Node) and 24
+  `npm test` tests (1 new: the bridge plays exactly like `simulateSolve`).
 - Not yet tested: two different devices / networks end-to-end, Safari iOS as host.
 
 ## Bot strength and luck (2026-10-21)
@@ -99,6 +101,10 @@ Full design: [RL_DESIGN.md](RL_DESIGN.md); decisions D15–D20 (2026-10-22). Gro
   hard planner as policy; 10×10: 0.59 M / 0.11 M. Duplicate-format evaluator in place
 - P2: explorer learning — step 0 ✅ (2026-10-22): no-learning Bayesian explorer shipped as the
   "expert" level ([D21](DECISIONS.md)); the learned explorer now has to beat it
+  - ✅ The expert in the Python evaluator (2026-10-22, [D22](DECISIONS.md)):
+    `python -m labyrinthe_rl.bench --pairs expert:hard` runs expert.js through Node
+    (`scripts/expert-solve.mjs`). 5×5, 1,000 deals: expert 5.29 walls vs hard 11.54; it hits fewer
+    walls in 99.7% of rounds as played, as in D21. 2 minutes on an M1
 - P3: league self-play on 5×5
 - P4: ship
 - P5: scale to 8×8/10×10
