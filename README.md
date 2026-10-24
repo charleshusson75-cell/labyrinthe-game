@@ -96,7 +96,7 @@ The CI workflow (`.github/workflows/ci.yml`) runs the tests on every push and pu
 
 Details: [docs/PROTOCOL.md](docs/PROTOCOL.md) · design choices: [docs/DECISIONS.md](docs/DECISIONS.md) ·
 roadmap: [docs/PLAN.md](docs/PLAN.md) · self-improving bot (research plan):
-[docs/RL_DESIGN.md](docs/RL_DESIGN.md).
+[docs/RL_DESIGN.md](docs/RL_DESIGN.md), explained simply in [docs/RL_EXPLAINED.md](docs/RL_EXPLAINED.md).
 
 ### If players can't connect
 
