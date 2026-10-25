@@ -78,7 +78,7 @@ class Config(train_explorer.Config):
     d_mazes: int = 512  # mazes per iteration
     d_epochs: int = 3
     d_minibatch: int = 2048
-    d_lr: float = 3e-4
+    d_lr: float = 1e-3  # 3e-4 barely moved the designer (one noisy reward per ~14 decisions)
     d_entropy: float = 0.01
     d_value_coef: float = 0.1
     d_magnet: float = 0.02

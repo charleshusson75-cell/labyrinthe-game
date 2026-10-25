@@ -12,7 +12,7 @@ rl/.venv and the credentials in ~/.kaggle/kaggle.json.
   session unpacks it into /kaggle/working, so a run resumes from the checkpoint uploaded here.
 - push: fills kernel.py with a job (JOBS below), the commit (default: origin/main's head; the commit
   must be pushed, since the kernel clones the public repository) and the session's time budget, and
-  pushes it as the private script kernel USER/labyrinthe-p3 on "GPU T4 x2" (NvidiaTeslaT4) with
+  pushes it as the private script kernel USER/labyrinthe-p3-train on "GPU T4 x2" (NvidiaTeslaT4) with
   internet on. Pushing starts the session.
 - status: the session's state. Check it sparingly: a league session lasts ~11 hours.
 - fetch: downloads the session's output (runs, logs, summary.json) into a new directory,
@@ -31,7 +31,8 @@ RL = Path(__file__).resolve().parents[1]
 REPO_DIR = RL.parent
 RUNS = RL / "runs"
 KAGGLE = str(RL / ".venv" / "bin" / "kaggle")
-SLUG = "labyrinthe-p3"
+SLUG = "labyrinthe-p3"  # the private dataset
+KERNEL = "labyrinthe-p3-train"  # the script kernel (a kernel can't share a dataset's slug: HTTP 409)
 REPO = "https://github.com/charleshusson75-cell/labyrinthe-game.git"
 JAX, OPTAX = "0.12.0.1", "0.2.8"  # as in rl/.venv on the Mac
 PY = "python"
@@ -69,7 +70,7 @@ def jobs(name: str, args) -> list:
             {"name": "stage0", "gpu": 0, "cmd": [PY, "-m", "labyrinthe_rl.train_explorer", "--run", "runs/stage0", "--size", "5", "--channels", c, "--blocks", b,
                                                 "--iterations", "100000", "--hours", "{hours}", "--eval-every", "25", *TRAIN_GPU, *(["--resume"] if args.resume else [])]},
             {"name": "designer-vs-p2", "gpu": 1, "cmd": [PY, "-m", "labyrinthe_rl.league", "--run", "runs/designer-vs-p2", "--size", "5", "--designer-vs", "p2",
-                                                        "--d-channels", c, "--d-blocks", b, "--d-mazes", "1024", "--hours", "{hours}", "--iterations", "100000"]},
+                                                        "--d-channels", c, "--d-blocks", b, "--d-mazes", "1024", "--hours", "{hours}", "--iterations", "100000", "--save-minutes", "20"]},
         ]
     if name == "league":
         main = [PY, "-m", "labyrinthe_rl.league", "--run", f"runs/{args.run}", "--hours", "{hours}"]
@@ -77,7 +78,7 @@ def jobs(name: str, args) -> list:
             main += ["--resume"]
         else:
             main += ["--size", "5", "--channels", c, "--blocks", b, "--d-channels", c, "--d-blocks", b, "--iterations", "1000000",
-                     "--exploiters", "worker", "--explorer-init", args.explorer_init, *TRAIN_GPU, *args.extra]
+                     "--d-mazes", "1024", "--exploiters", "worker", "--explorer-init", args.explorer_init, *TRAIN_GPU, *args.extra]
             if args.designer_init:
                 main += ["--designer-init", args.designer_init]
         return [
@@ -100,7 +101,7 @@ def push(args) -> None:
     code = (Path(__file__).parent / "kernel.py").read_text().replace("__SPEC__", json.dumps(spec, indent=1))
     (folder / "kernel.py").write_text(code)
     meta = {
-        "id": f"{user()}/{SLUG}", "title": SLUG, "code_file": "kernel.py", "language": "python", "kernel_type": "script",
+        "id": f"{user()}/{KERNEL}", "title": KERNEL, "code_file": "kernel.py", "language": "python", "kernel_type": "script",
         "is_private": True, "enable_gpu": True, "enable_internet": True, "dataset_sources": [f"{user()}/{SLUG}"],
         "competition_sources": [], "kernel_sources": [], "machine_shape": "NvidiaTeslaT4",
     }
@@ -140,7 +141,7 @@ def upload(args) -> None:
 def fetch(args) -> None:
     dest = Path(args.to) if args.to else RUNS / "kaggle" / time.strftime("%Y%m%d-%H%M%S")
     dest.mkdir(parents=True, exist_ok=False)
-    run([KAGGLE, "kernels", "output", f"{user()}/{SLUG}", "-p", str(dest)])
+    run([KAGGLE, "kernels", "output", f"{user()}/{KERNEL}", "-p", str(dest)])
     print(f"output in {dest}")
 
 
@@ -151,7 +152,7 @@ def main(argv=None) -> None:
     p.add_argument("job", choices=["calibrate", "calibrate-alone", "stage0", "league"])
     p.add_argument("--hours", type=float, default=0.5, help="session budget, setup included")
     p.add_argument("--commit", default=None)
-    p.add_argument("--net", default="64x6", help="network channels×blocks (both roles)")
+    p.add_argument("--net", default="32x4", help="network channels×blocks (both roles; D26: 32x4)")
     p.add_argument("--precision", default="fp32")
     p.add_argument("--run", default="league-1", help="league run directory under runs/")
     p.add_argument("--resume", action="store_true")
@@ -172,7 +173,7 @@ def main(argv=None) -> None:
     elif args.cmd == "upload":
         upload(args)
     elif args.cmd == "status":
-        run([KAGGLE, "kernels", "status", f"{user()}/{SLUG}"])
+        run([KAGGLE, "kernels", "status", f"{user()}/{KERNEL}"])
     elif args.cmd == "fetch":
         fetch(args)
     elif args.cmd == "quota":

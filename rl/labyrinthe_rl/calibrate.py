@@ -105,7 +105,11 @@ def main(argv=None):
             c, b = map(int, net.split("x"))
             for envs in map(int, args.envs.split(",")):
                 for mb in map(int, args.minibatch.split(",")):
-                    r = explorer_rate(args.size, c, b, envs, mb, args.iterations)
+                    try:
+                        r = explorer_rate(args.size, c, b, envs, mb, args.iterations)
+                    except Exception as e:  # e.g. out of device memory: record it and go on
+                        print(f"{net:<7} {prec:<5} {envs:>5} {mb:>9}  failed: {str(e).splitlines()[0][:100]}", flush=True)
+                        continue
                     r.update(kind="explorer", net=net, precision=prec, envs=envs, minibatch=mb, device=dev.device_kind, size=args.size)
                     results.append(r)
                     print(f"{net:<7} {prec:<5} {envs:>5} {mb:>9} {r['params']:>9,} {r['probes_per_s']:>10,.0f} {r['iteration_s']:>7.2f} {r['compile_s']:>9.1f}", flush=True)

@@ -277,7 +277,7 @@ most walls in. Options: `--bots learned,hard,expert`, `--rounds`, `--candidates`
   as a version of the private dataset `charleshusson/labyrinthe-p3` (created on first use).
 - `drive.py push JOB --hours H` fills `kernel.py` with the job, the commit (default: `origin/main`,
   which must hold the code: the kernel clones the public repository) and the time budget, and pushes
-  it as the private script kernel `labyrinthe-p3` on "GPU T4 x2" with internet. Jobs: `calibrate`,
+  it as the private script kernel `labyrinthe-p3-train` on "GPU T4 x2" with internet. Jobs: `calibrate`,
   `stage0` (P2's recipe with a bigger net on GPU 0, a designer against P2's explorer on GPU 1),
   `league` (main training on GPU 0, the exploiter worker on GPU 1; `--resume` to continue).
 - The kernel installs jax[cuda12], unpacks the bundle into `/kaggle/working`, runs one job per GPU
