@@ -120,7 +120,8 @@ Full design: [RL_DESIGN.md](RL_DESIGN.md); decisions D15–D20 (2026-10-22), D21
     - the adversarial pick (worst of 32 mazes) still pushes it near the budget, like the expert;
     - the belief head barely beats the base rate, so planning on it (`--plan`) doesn't help yet;
     - ≈ equilibrium values on 3×3 (needs boards < 4 in training).
-- P3: league self-play on 5×5
+- P3: league self-play on 5×5 — runs on Kaggle T4 × 2 (D24): GPU calibration, then stage 0 (P2's
+  recipe with a bigger network), then league runs; evaluation on the Mac
 - P4: ship
 - P5: scale to 8×8/10×10
 - P6: play-time search

@@ -481,3 +481,46 @@ which came from expert.js with its own candidates; compare within a table.)
   as the expert does, rather than per-side marginals (P6).
 - **More compute:** neither run had plateaued when stopped. A bigger network (48 × 6) is 3× slower
   per sample on this CPU; a GPU would lift both limits.
+
+## D24 — Train on Kaggle GPUs, develop on the Mac; no separate P2 re-run (2026-10-26)
+
+**Context.** P2 (D23) was limited by the M1's CPU: the network's gradient runs at ≈ 3,500 samples/s,
+a 48 × 6 network would be 3× slower, and neither run had plateaued when stopped (5×5: 2.06 M probes
+in 141 min). The user has Kaggle notebooks with about 30 GPU hours per week (P100 or 2 × T4, sessions
+up to ~12 h).
+
+**Decision.**
+- **Training runs go to Kaggle, on "GPU T4 × 2".** Not the P100: it's a Pascal GPU, and NVIDIA's next
+  CUDA toolkit drops Pascal, so future JAX GPU builds may not run on it. The T4 is Turing (compute
+  capability 7.5). Sessions are capped (~12 h), so training checkpoints regularly and resumes.
+- **The Mac stays for development and judging:** tests, short 4×4 smoke runs, evaluation against the
+  expert (Node bridge, D22), and shipping. Results come back as files: intermediate checkpoints in a
+  private Kaggle dataset; small milestone checkpoints in `rl/checkpoints/` (larger ones as GitHub
+  Releases in P4).
+- **No standalone re-run of P2.**
+  - P2 met its go/no-go on bot-made mazes (4.2 walls of 12 vs 5.3 for the expert).
+  - Its two weak spots are what P3's learning designer exists to fix: uniform mazes (3.2 vs 2.7 for
+    the expert) and the worst-of-32 adversarial pick (9.55 of 12).
+  - Training P2 longer against the same fixed designers would polish a strategy P3 reshapes anyway.
+- **The CPU limit that does matter, network size, is handled inside P3.**
+  - **Calibration first** (≤ 30 GPU minutes): measure training probes/s on T4 × 2 for 32 × 4 (P2's),
+    64 × 6 and 96 × 8. Keep the largest that still trains ≥ 5,000 probes/s: one 10-hour run is then
+    ≥ 180 M probes, ~90× P2's 5×5 run. If the GPU isn't at least 5× faster than the Mac on this
+    workload, stay on the Mac and record why.
+  - **Stage 0 = P2's recipe on the GPU** with the chosen network (explorer vs the fixed designer
+    mix, adversary included), until it matches or beats P2's checkpoint. This redoes P2 at almost
+    no cost. P2's checkpoint stays as a frozen reference and league member.
+- **Weekly budget (~30 GPU h):**
+  - ≈ 1 h for calibration and stage 0;
+  - two league runs of ≈ 11 h;
+  - the rest for exploiters (measuring exploitability) and slack.
+
+  Evaluation happens on the Mac between runs.
+- **P3 targets** (5×5, 12 walls; guesses to steer by, not promises):
+  - **Explorer:** the worst-of-32 adversarial pick (same `exploit` setup as D23) falls from 9.55
+    toward ≤ 8.
+  - **Designer:** the expert hits ≥ 7 of 12 walls on P3 designer mazes (5.3 on "hard" mazes today),
+    and the mazes stay varied (no repeats; entropy reported).
+  - **Exploitability:** a fresh exploiter trained against frozen P3 agents gains less from one
+    generation to the next.
+  - **Head to head:** duplicate-format scores against P2's explorer and the expert.
