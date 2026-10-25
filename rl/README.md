@@ -3,9 +3,12 @@
 Python + JAX tooling for a self-improving Labyrinthe bot ([design](../docs/RL_DESIGN.md), decisions
 D15–D23 in [DECISIONS.md](../docs/DECISIONS.md)).
 - **Phase P1:** the game engine, encodings, maze samplers, today's bots and the evaluator.
-- **Phase P2 (in progress):** the learned explorer. A convolutional network with a belief head,
-  trained by PPO against a mix of fixed designers (`train_explorer`), and played in the evaluator as
-  the `learned` bot.
+- **Phase P2:** the learned explorer. A convolutional network with a belief head, trained by PPO
+  against a mix of fixed designers (`train_explorer`), and played in the evaluator as the `learned`
+  bot.
+- **Phase P3 (in progress):** both roles learn. A designer network (`designer`) and a league of
+  current, frozen, exploiter and fixed agents (`league`), trained on Kaggle GPUs (`rl/kaggle/`),
+  played in the evaluator as the `p3` bot.
 
 The JavaScript game stays the reference. `scripts/export-fixtures.mjs` records what it does, and the
 tests here must reproduce it exactly.
@@ -61,6 +64,28 @@ rl/.venv/bin/python -m labyrinthe_rl.throughput --sizes 5,10
 node scripts/export-fixtures.mjs
 ```
 
+P3 (league self-play, [D25](../docs/DECISIONS.md)):
+
+```bash
+rl/.venv/bin/python -m labyrinthe_rl.league --run rl/runs/league-4x4 --size 4 --exploiters inline
+```
+
+```bash
+rl/.venv/bin/python -m labyrinthe_rl.league --run rl/runs/league-4x4 --resume --iterations 2000
+```
+
+```bash
+rl/.venv/bin/python -m labyrinthe_rl.bench --designers p3,hard,uniform --explorers hard,expert,learned,p3
+```
+
+```bash
+rl/.venv/bin/python -m labyrinthe_rl.calibrate --nets 32x4,64x6 --envs 256 --minibatch 512
+```
+
+```bash
+rl/.venv/bin/python rl/kaggle/drive.py push league --hours 10.8 --net 64x6
+```
+
 - `pytest rl`: parity with the JS engine plus unit tests (about a minute).
 - `train_explorer`: trains the learned explorer (see below). It writes checkpoints and logs into
   `--run` (`rl/runs/` is git-ignored); `--resume` continues a run; `--init` starts from another
@@ -74,6 +99,16 @@ node scripts/export-fixtures.mjs
   observation, `--devices 8` splits the batch over 8 CPU devices.
 - `export-fixtures.mjs`: regenerates `rl/tests/fixtures/` after a change to the JS rules or bots;
   `--check` (run in CI) fails if they're out of date.
+- `league`: trains the designer and the explorer together (below). `--worker` trains the exploiters
+  of a run's new generations in another process (the second GPU on Kaggle); `--designer-vs PATH|p2`
+  trains a fresh designer against one frozen explorer.
+- `bench --designers`: scores designers (walls hit by each of `--explorers` on their mazes, and how
+  varied the mazes are). Bots `p3` / `p3-sampled` are P3's agents (`--p3-run DIR` or
+  `--p3-explorer` / `--p3-designer`, default `rl/checkpoints/p3-*-NxN.npz`); `exploit --bots p3`.
+- `calibrate`: training probes/s of the explorer's PPO loop per network size (and the designer's
+  mazes/s with `--designer`); `--precision fp16` runs the convolutions in half precision.
+- `rl/kaggle/drive.py`: Kaggle sessions from the Mac (`upload`, `push`, `status`, `fetch`, `quota`;
+  see below).
 
 ## What's inside (`labyrinthe_rl/`)
 
@@ -92,6 +127,9 @@ node scripts/export-fixtures.mjs
 | `train_explorer.py` | PPO training of the explorer against a mix of designers: maze pools, batched rollouts, GAE, the belief loss, held-out evaluation, checkpoints |
 | `learned.py` | checkpoints (`save`, `load`), and batched explorations with a network as policy (`explore_mazes`, greedy by default; `Explorer` for the bench) |
 | `exploit.py` | an adversarial pick (the worst of 32 fresh mazes for each explorer), a cheap proxy for exploitability |
+| `designer.py` | the learned designer (P3, D25): its game (E, S, then walls one at a time, cut sides masked), observation planes, network, batched sampling, PPO pieces, maze diversity statistics |
+| `league.py` | league self-play for both roles: PFSP over frozen snapshots, exploiters and anchors, magnet regularization, generations, exploiters (inline or a worker process), checkpoints |
+| `calibrate.py` | training throughput of the PPO loops per network size and precision |
 | `throughput.py` | steps/s benchmark |
 | `env.py` | a Gymnasium wrapper (`Labyrinthe-Explorer-v0`) for standard tooling. Training will use the batched functions directly |
 
@@ -204,6 +242,48 @@ rl/.venv/bin/python -m labyrinthe_rl.learned rl/runs/explorer-5x5/checkpoint.npz
 `exploit` measures how exploitable an explorer is, with D21's adversarial pick: each round a
 designer keeps, out of 32 fresh mazes (16 randomMaze, 16 uniform), the one this explorer hits the
 most walls in. Options: `--bots learned,hard,expert`, `--rounds`, `--candidates`, `--checkpoint`.
+
+### P3: the designer and the league (`designer.py`, `league.py`, [D25](../docs/DECISIONS.md))
+
+- **Designer:** places E, then S, then the walls one at a time on the explorer's lattice. A wall can't
+  go on a wall or on a side whose closing would cut S off from E, so every maze is valid. 14 input
+  planes (walls, open and cut sides, E, S, BFS distances from E and from S, phase, budget, walls
+  left, E→S distance, size); policy logits at cell and side pixels, value = W · sigmoid(…).
+- **One league iteration:**
+  1. the main designer makes `--d-mazes` mazes; each is explored by one opponent (the main explorer
+     half the time, otherwise a league explorer by PFSP), reward = walls hit minus that opponent's
+     batch mean; PPO on the designer;
+  2. the mazes join the "self" pool; the main explorer plays `--envs` × `--horizon` probes, 40% of
+     its games on "self" mazes, the rest on league designers by PFSP; PPO on the explorer (P2's
+     losses);
+  3. both losses carry + coef · KL(π ‖ magnet), the magnet an EMA of the role's parameters.
+- **League members:** anchors (P2's designers `--mix`; explorers `--opponents p2,hard`), frozen
+  snapshots of both main agents every `--gen-every` iterations, and exploiters: a fresh explorer
+  trained only against a generation's designer, a fresh designer only against its explorer. Their
+  gains (walls) are the exploitability estimate; then they join. `--max-members` of each kind are
+  kept.
+- **Outputs** in `--run`: `explorer.npz`, `designer.npz` (+ optimizer state) and their magnets,
+  `league.json`, `league/gen-NNNN/` (frozen agents, exploiters, `exploit.json`), `log.jsonl`
+  (per iteration: walls hit per source and opponent, PFSP weights, losses; evaluations), `refs.json`.
+  `--save-minutes` and `--hours` make it fit Kaggle sessions; `--resume` continues.
+- **Evaluation** every `--eval-every` iterations: the explorer on P2's held-out sets and the
+  worst-of-32 pick, the designer's mazes (default budget) explored by the main explorer, P2's and
+  hard, with their diversity: distinct share, effective number of mazes (pair collisions), E/S pairs,
+  wall Hamming distance, E→S distance.
+
+### Kaggle (`rl/kaggle/`, D24, D25)
+
+- `drive.py upload [--runs NAME,...]` packs `rl/runs/pools` and the named runs into `bundle.tar`,
+  as a version of the private dataset `charleshusson/labyrinthe-p3` (created on first use).
+- `drive.py push JOB --hours H` fills `kernel.py` with the job, the commit (default: `origin/main`,
+  which must hold the code: the kernel clones the public repository) and the time budget, and pushes
+  it as the private script kernel `labyrinthe-p3` on "GPU T4 x2" with internet. Jobs: `calibrate`,
+  `stage0` (P2's recipe with a bigger net on GPU 0, a designer against P2's explorer on GPU 1),
+  `league` (main training on GPU 0, the exploiter worker on GPU 1; `--resume` to continue).
+- The kernel installs jax[cuda12], unpacks the bundle into `/kaggle/working`, runs one job per GPU
+  with a deadline under the 12-hour cap, and leaves runs, `logs/` and `summary.json` as its output.
+- `drive.py status` (check sparingly), `drive.py fetch` (output into `rl/runs/kaggle/<time>/`),
+  `drive.py quota` (GPU hours used this week).
 
 ## Parity with the JS engine
 

@@ -524,3 +524,75 @@ up to ~12 h).
   - **Exploitability:** a fresh exploiter trained against frozen P3 agents gains less from one
     generation to the next.
   - **Head to head:** duplicate-format scores against P2's explorer and the expert.
+
+## D25 — P3's design: a learned designer, a two-role league, exploiters on the second GPU (2026-10-26)
+
+**Context.** P3 (D19, D24): both roles learn, on 5×5 with 12 walls, trained on Kaggle T4 × 2. Left
+open by D19: the designer's network and action order, how validity is enforced, the reward, the
+league's sampling, the magnet's form, how exploiters are run and measured, and how the Mac drives
+Kaggle.
+
+**Decision** (`rl/labyrinthe_rl/designer.py`, `league.py`, `calibrate.py`, `rl/kaggle/`).
+- **Designer network:** D23's tower (dilated residual blocks with global pooling) on the same
+  (2N+1)² lattice, 14 input planes:
+  - walls placed, open sides, and **cut sides** (open sides whose closing would cut S off from E);
+  - E, S, the cell mask;
+  - **BFS distance planes** from E and from S, and the E→S distance as a constant. A 6-block net
+    can't follow a winding path by itself, and path length is what makes designed mazes hard (D21);
+  - the phase (placing E / S / walls), the budget, the walls left, the board size.
+  - Heads: a 1×1 policy read at cell and side pixels; a value (walls the explorer will hit) =
+    W · sigmoid(dense(mean and max pooled features)).
+- **Episode:** E, then S, then the walls one at a time, **in any order** (not a canonical raster
+  order: placing the decisive walls first is easier to learn). The per-step entropy therefore also
+  counts the W! orders of the same maze; it is reported as an upper bound only.
+- **Validity by masking, never rejection:** a wall can't go on a wall or on a cut side, so every
+  maze has exactly W walls and S reachable from E. Cut sides come from one flood fill per open side,
+  all batched on row bitmasks. Masking can't dead-end while W ≤ (N−1)², which covers every default
+  budget ± 2.
+- **Reward = walls hit** by the opponent that explored the maze (sampled policy), **minus that
+  opponent's batch mean**: the designer doesn't know whom it faces, and an opponent-dependent baseline
+  removes that luck of the draw without biasing the gradient.
+- **Diversity, reported at every evaluation:** share of distinct mazes; the effective number of
+  mazes, 1 / P(two draws are identical) from pair collisions (Rényi-2 entropy); E/S pairs and their
+  entropy; mean wall Hamming distance; mean E→S distance. The entropy bonus (0.01) keeps it up.
+- **League** (D19), sampling by **PFSP** (prioritized fictitious self-play) with an EMA of each
+  member's walls hit / W:
+  - explorer games: 40% on the main designer's newest mazes, 60% over the other designers with
+    weight ∝ prior · (0.1 + x²): the designers it hits the most walls on. Anchors: P2's mix (uniform,
+    randomMaze, normal, hard, adversary), its weights as priors;
+  - designer mazes: 50% explored by the main explorer, 50% by the other explorers with weight ∝
+    0.1 + (1 − x)²: those that hit fewest walls on its mazes. Fixed opponents: **P2's checkpoint**
+    (greedy, as in bench) and the **hard** planner;
+  - every `gen_every` iterations both main agents are frozen into the league (a generation); at most
+    12 snapshots and 12 exploiters per role are kept.
+- **Magnet (MMD / R-NaD style), both roles:** loss + 0.02 · KL(π ‖ magnet), the magnet an EMA of the
+  role's own parameters (rate 0.02 per iteration). It damps cycling; the entropy bonus is the same
+  idea with a uniform magnet.
+- **Exploiters:** for each generation, a **fresh** explorer (from scratch) trained only against that
+  generation's frozen designer, and a fresh designer trained only against its frozen explorer, for a
+  fixed budget.
+  - **Gain** = walls the main agent concedes minus the exploiter's, on held-out mazes at the default
+    budget, both measured with sampled policies (greedy too).
+  - Explorer gain + designer gain is the exploitability estimate tracked per generation. Then both
+    join the league.
+  - They run in a **worker process on the second GPU**, picking up generations as they appear,
+    instead of pausing the main training.
+- **Kaggle:** a script kernel (`rl/kaggle/kernel.py`) clones the public repository at a commit,
+  installs jax[cuda12], unpacks the private dataset's `bundle.tar` (P2's designed pools and earlier
+  checkpoints), and runs one job per GPU with a deadline under the 12-hour cap. Checkpoints every
+  20 minutes and on SIGTERM. `rl/kaggle/drive.py` pushes it from the Mac (`--accelerator
+  NvidiaTeslaT4` = "GPU T4 x2", internet on), checks the status, downloads the output and versions
+  the private dataset `charleshusson/labyrinthe-p3`. The kernel never holds Kaggle credentials:
+  results come back as the kernel's output, and the next session's inputs go up as a dataset version.
+- **Evaluation:** `bench --designers p3,hard,uniform --explorers hard,expert,learned` scores
+  designers (walls hit by fixed explorers, diversity); bots `p3` / `p3-sampled` (P3's explorer greedy
+  or sampled, with P3's designer) play `--pairs`; `exploit --bots p3` is D23's worst-of-32.
+
+**Alternatives considered.**
+- *Canonical wall order* (raster order, one-to-one with mazes, exact maze entropy). It needs
+  look-ahead masks so the policy can't get stuck, and forces the decisive walls to come in raster
+  order. Rejected for learnability.
+- *Rejection or a penalty for invalid mazes.* Wasted samples and a noisier signal; masking is exact.
+- *Data parallelism over the two T4s* for one training run. The networks are small, so two
+  independent processes (main training + exploiters, or two stage-0 variants) use both GPUs with no
+  communication. Revisit if calibration shows one GPU can't reach 5,000 probes/s with the chosen net.

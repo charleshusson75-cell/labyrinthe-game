@@ -86,12 +86,15 @@ class Config:
     value_coef: float = 0.05  # the value sums ~E per-side terms: its gradient is large (D23)
     belief_coef: float = 1.0
     max_grad_norm: float = 1.0
+    magnet: float = 0.0  # weight of KL(π ‖ magnet) (league.py: P3's magnet regularization; 0 in P2)
     iterations: int = 1000
     eval_every: int = 25
     eval_mazes: int = 512  # held-out mazes per designer, at the default budget
     expert_ref: int = 256  # of those, how many the expert explores once as a reference (needs Node)
     eval_worst: int = 128  # rounds of the worst-of-32 pick (exploit.py) in each evaluation; 0: none
     save_every: int = 25
+    save_minutes: float = 0.0  # also save the checkpoint every this many minutes (0: off)
+    hours: float = 0.0  # stop, saving, after this many hours of this process (0: no limit)
     snapshot_every: int = 100
     seed: int = 0
 
@@ -279,6 +282,7 @@ class Batch(NamedTuple):
     walls: jax.Array  # [T, B, E] the true maze: the belief target
     ended_hits: jax.Array  # [T, B] walls hit by a game that ended at this step, −1 otherwise
     ended_kind: jax.Array
+    mag_logp: jax.Array = None  # [T, B, E] the magnet policy's log-probabilities (league.py)
 
 
 def _where_games(mask, new, old):
@@ -286,8 +290,9 @@ def _where_games(mask, new, old):
 
 
 @partial(jax.jit, static_argnames=("horizon", "dilations"))
-def rollout(params, envs: Envs, pool: PoolArrays, key, horizon: int, dilations):
-    """`horizon` steps of every game with the sampled policy; ended games restart on new mazes."""
+def rollout(params, envs: Envs, pool: PoolArrays, key, horizon: int, dilations, magnet=None):
+    """`horizon` steps of every game with the sampled policy; ended games restart on new mazes.
+    With `magnet` (parameters), its log-probabilities are recorded for the KL term of the loss."""
     n = envs.kind.shape[0]
 
     def one(carry, k):
@@ -301,10 +306,11 @@ def rollout(params, envs: Envs, pool: PoolArrays, key, horizon: int, dilations):
         states, result = jax.vmap(step)(e.states, action)
         done = states.done
         new_states, new_kind = draw(pool, k_new, n)
+        mag = None if magnet is None else jax.nn.log_softmax(network.apply(magnet, obs, legal, dilations).logits)
         rec = Batch(
             obs=obs, legal=legal, action=action, logp=logp, value=-out.value,
             reward=-(result == WALL).astype(jnp.float32), done=done, walls=e.states.walls,
-            ended_hits=jnp.where(done, states.hits, -1), ended_kind=e.kind,
+            ended_hits=jnp.where(done, states.hits, -1), ended_kind=e.kind, mag_logp=mag,
         )
         nxt = Envs(_where_games(done, new_states, states), jnp.where(done, new_kind, e.kind))
         return nxt, rec
@@ -349,6 +355,11 @@ def loss_fn(params, mb: dict, cfg: Config, dilations):
         "pg": pg, "value": v_loss, "entropy": entropy, "belief": b_loss,
         "kl": jnp.mean(mb["logp"] - logp), "clipped": jnp.mean(jnp.abs(ratio - 1) > cfg.clip),
     }
+    if "mag_logp" in mb:  # magnet regularization (MMD-style): KL(π ‖ magnet) over the legal probes
+        p = jnp.exp(logp_all)
+        kl_mag = jnp.mean(jnp.sum(jnp.where(mb["legal"], p * (logp_all - mb["mag_logp"]), 0.0), axis=-1))
+        total = total + cfg.magnet * kl_mag
+        stats["magnet_kl"] = kl_mag
     return total, stats
 
 
@@ -372,6 +383,8 @@ def make_update(cfg: Config, dilations):
             "obs": batch.obs, "legal": batch.legal, "action": batch.action, "logp": batch.logp,
             "walls": batch.walls, "adv": adv, "ret": ret,
         }
+        if batch.mag_logp is not None:
+            flat["mag_logp"] = batch.mag_logp
         flat = {k: v.reshape((-1,) + v.shape[2:]) for k, v in flat.items()}
         var = jnp.var(ret)
         return flat, 1 - jnp.var(ret - batch.value) / jnp.maximum(var, 1e-8)
@@ -552,8 +565,12 @@ def train(cfg: Config, run, resume: bool = False, init_from=None, log=print) -> 
 
     old_term = signal.signal(signal.SIGTERM, on_term)
     log_file = open(run / "log.jsonl", "a")
+    started = last_save = time.time()
     try:
         while iteration < cfg.iterations and not stop["now"]:
+            if cfg.hours and time.time() - started > cfg.hours * 3600:
+                log(f"time budget of {cfg.hours} h reached")
+                break
             t0 = time.perf_counter()
             adv = pool.refresh(iteration, params, dilations)
             key, k_roll, k_upd = jax.random.split(key, 3)
@@ -582,8 +599,9 @@ def train(cfg: Config, run, resume: bool = False, init_from=None, log=print) -> 
                 f" kl {stats['kl']:.4f} ev {stats['explained_var']:.2f}")
             if "eval" in record:
                 log(f"  eval (greedy, {evals.walls} walls): " + evals.line(last_eval))
-            if iteration % cfg.save_every == 0:
+            if iteration % cfg.save_every == 0 or (cfg.save_minutes and time.time() - last_save > cfg.save_minutes * 60):
                 save(ckpt)
+                last_save = time.time()
             if cfg.snapshot_every and iteration % cfg.snapshot_every == 0:
                 save(run / f"snap-{iteration:06d}.npz", with_opt=False)
     except KeyboardInterrupt:
@@ -612,7 +630,7 @@ def config_from_args(argv=None) -> tuple:
     if args.resume and ckpt.exists():
         with np.load(ckpt) as z:
             saved = json.loads(str(z["meta"]))["config"]
-        free = ("iterations", "eval_every", "save_every", "snapshot_every", "mix")  # a curriculum may change the mix
+        free = ("iterations", "eval_every", "save_every", "save_minutes", "hours", "snapshot_every", "mix")  # a curriculum may change the mix
         changed = sorted(k for k in given if k not in free and given[k] != saved.get(k))
         if changed:
             ap.error(f"--resume keeps the run's config; can't change {', '.join(changed)}")

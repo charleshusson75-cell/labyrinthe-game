@@ -32,6 +32,10 @@ from .lattice import EXIT, N_PLANES, OPEN, REACHED, UNKNOWN, WALL, action_pixels
 
 NEG = -1e9  # logit of an illegal probe
 FAR = 1e6  # path cost through a known wall
+# Convolutions run in this dtype, accumulating in float32; everything else stays float32. Set it
+# once at startup, before anything is compiled (calibrate/league --precision): jnp.float16 uses the
+# tensor cores of a T4.
+COMPUTE_DTYPE = jnp.float32
 
 
 class NetConfig(NamedTuple):
@@ -52,7 +56,9 @@ def _conv_init(key, k: int, cin: int, cout: int, scale: float = 1.0) -> dict:
     return {"w": std * jax.random.normal(key, (k, k, cin, cout), jnp.float32), "b": jnp.zeros(cout, jnp.float32)}
 
 
-def init(key, cfg: NetConfig = NetConfig()) -> dict:
+def init(key, cfg: NetConfig = NetConfig(), in_planes: int = N_PLANES, head_out: int = 3) -> dict:
+    """The explorer's parameters; the designer (designer.py) reuses the tower with its own input
+    planes and a one-channel head."""
     keys = iter(jax.random.split(key, 3 + 3 * cfg.blocks))
     c = cfg.channels
     blocks = []
@@ -65,8 +71,8 @@ def init(key, cfg: NetConfig = NetConfig()) -> dict:
                 "g": {"w": jax.random.normal(next(keys), (2 * c, c), jnp.float32) * np.sqrt(1.0 / (2 * c)), "b": jnp.zeros(c, jnp.float32)},
             }
         )
-    head = _conv_init(next(keys), 1, c, 3, scale=0.1)
-    params = {"stem": _conv_init(next(keys), 3, N_PLANES, c), "blocks": blocks, "head": head}
+    head = _conv_init(next(keys), 1, c, head_out, scale=0.1)
+    params = {"stem": _conv_init(next(keys), 3, in_planes, c), "blocks": blocks, "head": head}
     if cfg.plan:
         params["plan"] = jnp.float32(2.95)  # softplus → a weight of 3 per expected wall
     return params
@@ -74,8 +80,9 @@ def init(key, cfg: NetConfig = NetConfig()) -> dict:
 
 def _conv(x, p, dilation: int = 1):
     y = jax.lax.conv_general_dilated(
-        x, p["w"], window_strides=(1, 1), padding="SAME", rhs_dilation=(dilation, dilation),
-        dimension_numbers=("NHWC", "HWIO", "NHWC"),
+        x.astype(COMPUTE_DTYPE), p["w"].astype(COMPUTE_DTYPE), window_strides=(1, 1), padding="SAME",
+        rhs_dilation=(dilation, dilation), dimension_numbers=("NHWC", "HWIO", "NHWC"),
+        preferred_element_type=jnp.float32,
     )
     return y + p["b"]
 

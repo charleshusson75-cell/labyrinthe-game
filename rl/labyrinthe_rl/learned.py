@@ -96,9 +96,17 @@ def load(path) -> tuple:
     with np.load(path) as z:
         arrays = {k: z[k] for k in z.files}
     meta = json.loads(str(arrays["meta"]))
+    return unflatten(template(meta), arrays, "params"), meta, arrays
+
+
+def template(meta: dict) -> dict:
+    """Parameters shaped like a checkpoint's network: the explorer's, or the designer's (P3)."""
     cfg = net_config(meta)
-    params = unflatten(network.init(jax.random.key(0), cfg), arrays, "params")
-    return params, meta, arrays
+    if meta.get("kind") == "designer":
+        from . import designer
+
+        return designer.init_net(jax.random.key(0), cfg)
+    return network.init(jax.random.key(0), cfg)
 
 
 # ------------------------------------------------------------------ playing

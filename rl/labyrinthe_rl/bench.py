@@ -4,6 +4,8 @@
                                   [--pairs hard:easy,hard:normal,normal:easy,hard:hard]
                                   [--mazes bots|random|uniform] [--particles 200]
                                   [--checkpoint rl/checkpoints/explorer-5x5.npz]
+                                  [--p3-explorer PATH] [--p3-designer PATH] [--p3-run DIR]
+    python -m labyrinthe_rl.bench --designers p3,hard,uniform --explorers hard,expert,learned
 
 Each deal is a pair of mazes (a, b): designed by bots A and B (`--mazes bots`, as in a real round),
 or dealt by a sampler. Both bots explore both mazes, i.e. play both seats:
@@ -17,7 +19,15 @@ once and reused in every pairing.
 Bots: easy, normal, hard (src/bot/brain.js, batched in planner.py), expert (src/bot/expert.js run
 by Node, see expert.py; it designs like hard, as in the game) and learned (the network trained by
 train_explorer.py, loaded from `--checkpoint`, by default the committed one for the board size; it
-explores greedily and designs like hard too).
+explores greedily and designs like hard too). P3 (league.py): p3, its explorer (greedy) and its
+designer (sampled), from `--p3-explorer` / `--p3-designer` (default: the committed
+rl/checkpoints/p3-explorer-NxN.npz and p3-designer-NxN.npz) or a league run's latest (`--p3-run`);
+p3-sampled, the same with the explorer sampling its probes.
+
+`--designers` scores designers instead of pairing bots: each designer makes `--deals` mazes and
+every bot of `--explorers` explores all of them (walls hit, mean ± s.e.), with how varied the mazes
+are (designer.diversity: share of distinct mazes, E→S path length in steps). Designers: any bot
+above (its designer) and the samplers uniform and random (randomMaze).
 
 Columns, per pairing A:B:
     hits A, hits B    walls hit as explorer (mean over both seats) and as a share of the budget W
@@ -35,7 +45,9 @@ from typing import Callable
 import jax
 import numpy as np
 
-from . import expert, learned, planner
+from pathlib import Path
+
+from . import designer, expert, learned, planner
 from .geometry import default_wall_budget, max_wall_budget
 from .mazes import sample_mazes
 
@@ -71,6 +83,28 @@ def learned_bot(checkpoint, greedy: bool = True) -> Bot:
     """The learned explorer of a checkpoint (train_explorer.py), with hard's designer."""
     explorer = learned.Explorer(checkpoint, greedy)
     return Bot(name="learned", design=BOTS["hard"].design, explore=explorer.explore)
+
+
+def p3_bot(explorer_path, designer_path, greedy: bool = True, name: str = "p3") -> Bot:
+    """P3's agents (league.py): the learned explorer and the learned designer (it samples its mazes)."""
+    explorer = learned.Explorer(explorer_path, greedy)
+    maker = designer.Designer(designer_path)
+    return Bot(name=name, design=maker.design, explore=explorer.explore)
+
+
+def sampler_bot(kind: str) -> Bot:
+    """A maze sampler as a designer (no explorer): uniform or random (randomMaze)."""
+
+    def design(size, walls, count, rng, key):
+        return sample_mazes(kind, size, walls, count, int(rng.integers(2**31)))
+
+    return Bot(name=kind, design=design, explore=None)
+
+
+def p3_paths(size: int, run=None) -> tuple:
+    if run:
+        return Path(run) / "explorer.npz", Path(run) / "designer.npz"
+    return learned.DEFAULT_DIR / f"p3-explorer-{size}x{size}.npz", learned.DEFAULT_DIR / f"p3-designer-{size}x{size}.npz"
 
 
 BOTS = {level: heuristic(level) for level in planner.LEVEL_INDEX}
@@ -135,6 +169,30 @@ def duplicate_match(a: Bot, b: Bot, deals: Deals) -> dict:
     }
 
 
+def score_designers(designers: list, explorers: list, deals: Deals) -> dict:
+    """Walls hit by every explorer on every designer's mazes (default: the same mazes for all
+    explorers, with a shared key), and the mazes' diversity."""
+    out = {}
+    for d in designers:
+        mazes, key = deals.get(d, "A")
+        row = {"diversity": designer.diversity(*mazes)}
+        for x in explorers:
+            row[x.name] = mean_se(x.explore(*mazes, key))
+        out[d.name] = row
+    return out
+
+
+def designer_report(results: dict, explorers: list, walls: int) -> str:
+    names = [x.name for x in explorers]
+    lines = [f"{'designer':<12}" + "".join(f" {n:>15}" for n in names) + f" {'distinct':>9} {'path':>6}"]
+    for d, row in results.items():
+        cells = [f"{row[n][0]:.2f} ± {row[n][1]:.2f}" for n in names]
+        div = row["diversity"]
+        lines.append(f"{d:<12}" + "".join(f" {c:>15}" for c in cells) + f" {100 * div['distinct']:>8.1f}% {div['path']:>6.1f}")
+    lines.append(f"\n(walls hit of {walls}; distinct = share of distinct mazes, path = mean E→S distance in steps)")
+    return "\n".join(lines)
+
+
 def _pm(x) -> str:
     return f"{x[0]:+.2f} ± {x[1]:.2f}"
 
@@ -174,20 +232,54 @@ def main(argv=None):
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--particles", type=int, default=expert.PARTICLES, help="particles of the expert explorer")
     ap.add_argument("--checkpoint", default=None, help="the learned explorer (default: rl/checkpoints/explorer-NxN.npz)")
+    ap.add_argument("--p3-explorer", default=None, help="P3's explorer (default: rl/checkpoints/p3-explorer-NxN.npz)")
+    ap.add_argument("--p3-designer", default=None, help="P3's designer (default: rl/checkpoints/p3-designer-NxN.npz)")
+    ap.add_argument("--p3-run", default=None, help="take P3's agents from a league run directory")
+    ap.add_argument("--designers", default=None, help="score these designers instead of pairing bots (e.g. p3,hard,uniform)")
+    ap.add_argument("--explorers", default="hard,expert,learned", help="the explorers that score --designers")
     args = ap.parse_args(argv)
     bots = {**BOTS, "expert": expert_bot(args.particles)}
-    pairs = [tuple(pair.split(":")) for pair in args.pairs.split(",")]
-    if any(len(p) != 2 or not set(p) <= bots.keys() | {"learned"} for p in pairs):
-        ap.error(f"--pairs is a list of A:B, with bots among {', '.join(bots)}, learned")
-    if any("learned" in p for p in pairs):
+    lazy = {"learned", "p3", "p3-sampled"}
+    if args.designers:
+        wanted = set(args.designers.split(",")) | set(args.explorers.split(","))
+        known = bots.keys() | lazy | {"uniform", "random"}
+        if not wanted <= known:
+            ap.error(f"unknown bots {', '.join(sorted(wanted - known))} (known: {', '.join(sorted(known))})")
+    else:
+        pairs = [tuple(pair.split(":")) for pair in args.pairs.split(",")]
+        if any(len(p) != 2 or not set(p) <= bots.keys() | lazy for p in pairs):
+            ap.error(f"--pairs is a list of A:B, with bots among {', '.join(sorted(bots.keys() | lazy))}")
+        wanted = {b for p in pairs for b in p}
+    if "learned" in wanted:
         checkpoint = args.checkpoint or learned.default_checkpoint(args.size)
         try:
             bots["learned"] = learned_bot(checkpoint)
         except FileNotFoundError:
             ap.error(f"no learned explorer at {checkpoint} (train one with train_explorer, or pass --checkpoint)")
+    if wanted & {"p3", "p3-sampled"}:
+        xp, dp = p3_paths(args.size, args.p3_run)
+        xp, dp = args.p3_explorer or xp, args.p3_designer or dp
+        try:
+            bots["p3"] = p3_bot(xp, dp)
+            bots["p3-sampled"] = p3_bot(xp, dp, greedy=False, name="p3-sampled")
+        except FileNotFoundError as e:
+            ap.error(f"no P3 agents: {e} (train them with league, or pass --p3-explorer / --p3-designer / --p3-run)")
+    for kind in ("uniform", "random"):
+        bots.setdefault(kind, sampler_bot(kind))
     walls = args.walls or default_wall_budget(args.size)
     if not 1 <= walls <= max_wall_budget(args.size):
         ap.error(f"walls must be 1..{max_wall_budget(args.size)} on a {args.size}×{args.size} board")
+    if args.designers:
+        deals = Deals(args.size, walls, args.deals, "bots", args.seed)
+        designers = [bots[n] for n in args.designers.split(",")]
+        explorers = [bots[n] for n in args.explorers.split(",")]
+        if any(x.explore is None for x in explorers):
+            ap.error("uniform and random are designers only")
+        print(f"{args.size}×{args.size}, {walls} walls, {args.deals} mazes per designer, explored by {args.explorers}\n")
+        t0 = time.perf_counter()
+        print(designer_report(score_designers(designers, explorers, deals), explorers, walls))
+        print(f"\n({time.perf_counter() - t0:.1f} s)")
+        return
     source = {"bots": "designed by the bots", "random": "from randomMaze", "uniform": "uniform among valid mazes"}[args.mazes]
     print(f"{args.size}×{args.size}, {walls} walls, {args.deals} deals (×2 seats), mazes {source}\n")
     deals = Deals(args.size, walls, args.deals, args.mazes, args.seed)
