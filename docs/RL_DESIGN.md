@@ -2,8 +2,8 @@
 
 Status: research plan. Written 2026-10-21, decisions taken 2026-10-22. Implemented so far: the
 exact solver (`research/exact_solve.mjs`), the benchmark (`scripts/benchmark.mjs`), P1: the
-training stack's foundation in `rl/` (§5.1), and P2 step 0: the no-learning Bayesian explorer,
-shipped as the "expert" level (§5.2, D21).
+training stack's foundation in `rl/` (§5.1), P2 step 0: the no-learning Bayesian explorer, shipped
+as the "expert" level (§5.2, D21), and P2's first learned explorers (§5.3, D23).
 
 > **Decisions (2026-10-22, see [DECISIONS.md](DECISIONS.md) D15–D20)**
 > - **Saturation:** walls-hit ≈ W is an artifact of a predictable explorer. We train on walls hit,
@@ -270,7 +270,7 @@ with real players.
 |---|---|---|
 | **P0 (done)** | Exact 3×3 solver; bot benchmark; 4×4–10×10 boards in the game | Ground-truth values in §2 |
 | **P1 ✅** (2026-10-22) | `rl/`: JAX engine (any size), lattice encoding, maze samplers, Python ports of today's bots, duplicate-format evaluator, JS→Python parity fixtures in CI (§5.1) | Parity green; ≥ 10⁵ explorer steps/s on 5×5 (CPU). **Met:** 203 fixtures reproduced exactly; 2.5 M steps/s on 5×5 on one CPU core (0.46 M with the hard planner as policy) |
-| **P2** | Explorer learning vs fixed designer mixes (random + "hard"), 4×4 → 5×5, with belief head. **Step 0 ✅** (2026-10-22): Bayesian explorer without learning, the "expert" level (§5.2) | Fewer walls hit than the "hard" heuristic on 5×5 (step 0: 5.3 vs 7.8–11.5 of 12); now also fewer than "expert"; ≈ equilibrium values on 3×3 |
+| **P2** | Explorer learning vs fixed designer mixes (random + "hard"), 4×4 → 5×5, with belief head. **Step 0 ✅** (2026-10-22): Bayesian explorer without learning, the "expert" level (§5.2). **Learned explorer 🟡** (2026-10-25, §5.3) | Fewer walls hit than the "hard" heuristic on 5×5 (step 0: 5.3 vs 7.8–11.5 of 12); now also fewer than "expert" (**met on hard's mazes**: 4×4 and 5×5, §5.3; not on uniform mazes); ≈ equilibrium values on 3×3 |
 | **P3** | Full league self-play on 5×5 (both roles, MMD-regularized PPO, exploiters) | Exploitability falls generation after generation; beats "hard" in duplicate matches |
 | **P4** | Ship the 5×5 bot to the site (ONNX); levels = rating bands of checkpoints | < 50 ms per move in the browser |
 | **P5** | Scale: curriculum to 8×8 / 10×10 on a cloud GPU; re-pick default wall budgets (D15) | Near-equilibrium hits/W well below 1; still improving |
@@ -357,6 +357,31 @@ The round scores match the JS benchmark (80% and 86%).
   not one.
 - **The particle sampler** is reusable for P6 (play-time search). Keeping particles between moves
   (SMC) is the natural next improvement.
+
+### 5.3 P2 — the learned explorer (first runs 2026-10-25)
+
+`rl/labyrinthe_rl/train_explorer.py`; choices and numbers in [D23](DECISIONS.md), commands in
+[rl/README.md](../rl/README.md).
+
+**How it works.**
+- **Network:** the D17 tower (32 channels × 4 blocks, dilated, global pooling), with policy, belief
+  and value heads. The value is the sum over the unknown sides of P(this side will be hit).
+- **Learning:** PPO, reward −1 per wall hit.
+- **Designers:** a mix of uniform, randomMaze, normal, hard, and an adversary. The adversary keeps the
+  worst of 8 fresh mazes for the current policy, so the explorer can't settle on one idea of what
+  mazes look like.
+
+**What it taught us.**
+- **It learns fast, even on a laptop CPU.** It beats hard after ~0.1 M probes and matches the expert
+  on designed mazes within ~0.5 M (4×4) to ~0.3 M (5×5) probes.
+  In bench (1,000 deals, hard's mazes): 4×4 1.70 vs 1.88 for the expert; 5×5 4.17 vs 5.25.
+- **The policy learns the designers' style directly; the belief head hardly does.** Its
+  cross-entropy barely beats the base rate, and planning on it is worse than the policy on designed
+  mazes (but better on uniform ones).
+  A network trained on the belief alone does only slightly better, so it isn't starved by the
+  shared trunk: per-side marginals just carry less than the policy has learned.
+- **The open weakness is the same as the expert's:** uniform mazes, where hard still does much
+  better, and the adversarial pick. This is P3's job: a designer that learns.
 
 ## 6. Open questions
 

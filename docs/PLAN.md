@@ -59,6 +59,9 @@ Living checklist. ✅ done · 🟡 partial · ⬜ todo. Design rationale lives i
   `npm test` unchanged and green; CI gains a Python job.
 - 2026-10-22 — Expert in `bench` (D22): 251 pytest tests green (3 new, skipped without Node) and 24
   `npm test` tests (1 new: the bridge plays exactly like `simulateSolve`).
+- 2026-10-25 — RL P2 learned explorer (D23): 259 pytest tests green (9 new: network on any
+  board, planner prior, checkpoint round trip, a tiny training run that saves, resumes and plays in
+  `bench`, the adversarial pick); `npm test` unchanged and green (24).
 - Not yet tested: two different devices / networks end-to-end, Safari iOS as host.
 
 ## Bot strength and luck (2026-10-21)
@@ -94,7 +97,7 @@ the starter wins ties):
 
 ## Next: self-improving bot
 
-Full design: [RL_DESIGN.md](RL_DESIGN.md); decisions D15–D20 (2026-10-22). Ground truth:
+Full design: [RL_DESIGN.md](RL_DESIGN.md); decisions D15–D20 (2026-10-22), D21–D23. Ground truth:
 `research/exact_solve.mjs` (exact equilibrium on 3×3). Revised phases:
 - P1: JAX engine + fixtures + baselines ✅ (2026-10-22): `rl/` ([README](../rl/README.md)). Parity green
   on 203 JS fixtures. Explorer steps/s on one CPU core: 2.5 M on 5×5 (target 10⁵), 0.46 M with the
@@ -105,6 +108,18 @@ Full design: [RL_DESIGN.md](RL_DESIGN.md); decisions D15–D20 (2026-10-22). Gro
     `python -m labyrinthe_rl.bench --pairs expert:hard` runs expert.js through Node
     (`scripts/expert-solve.mjs`). 5×5, 1,000 deals: expert 5.29 walls vs hard 11.54; it hits fewer
     walls in 99.7% of rounds as played, as in D21. 2 minutes on an M1
+  - ✅ Learned explorer, first runs (2026-10-25, [D23](DECISIONS.md)): `python -m
+    labyrinthe_rl.train_explorer` (PPO, convolutional network with policy / belief / value heads,
+    designers uniform + randomMaze + normal + hard + an adversary aimed at the learner). Played in
+    `bench` as `learned` (checkpoints in `rl/checkpoints/`). Walls hit on hard's mazes, 1,000 deals:
+    - 4×4 (1.45 M steps, 65 min): learned 1.70 vs expert 1.88 (56% of seats) and vs hard 6.86;
+    - 5×5 (2.06 M steps, 141 min): learned 4.17 vs expert 5.25 (64% of seats) and vs hard 11.54.
+  - 🟡 Still open in P2:
+    - uniform mazes: the learned explorer is far behind hard there (5×5: 3.20 walls vs 1.58; the
+      expert 2.65);
+    - the adversarial pick (worst of 32 mazes) still pushes it near the budget, like the expert;
+    - the belief head barely beats the base rate, so planning on it (`--plan`) doesn't help yet;
+    - ≈ equilibrium values on 3×3 (needs boards < 4 in training).
 - P3: league self-play on 5×5
 - P4: ship
 - P5: scale to 8×8/10×10

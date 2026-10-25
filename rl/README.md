@@ -1,9 +1,11 @@
 # rl/: the self-play training stack
 
 Python + JAX tooling for a self-improving Labyrinthe bot ([design](../docs/RL_DESIGN.md), decisions
-D15–D22 in [DECISIONS.md](../docs/DECISIONS.md)). This is **phase P1**: the game engine, encodings,
-maze samplers, today's bots and the evaluator. Nothing learns yet; P2 (explorer learning) builds on
-these pieces.
+D15–D23 in [DECISIONS.md](../docs/DECISIONS.md)).
+- **Phase P1:** the game engine, encodings, maze samplers, today's bots and the evaluator.
+- **Phase P2 (in progress):** the learned explorer. A convolutional network with a belief head,
+  trained by PPO against a mix of fixed designers (`train_explorer`), and played in the evaluator as
+  the `learned` bot.
 
 The JavaScript game stays the reference. `scripts/export-fixtures.mjs` records what it does, and the
 tests here must reproduce it exactly.
@@ -11,7 +13,8 @@ tests here must reproduce it exactly.
 ## Setup
 
 Python 3.12, CPU only (no GPU needed for 4×4/5×5). Node.js (≥ 18, as for the game) too: it
-exports the fixtures, and the evaluator runs the expert bot in it.
+exports the fixtures, and the evaluator runs the expert bot in it. Dependencies: JAX, NumPy,
+Gymnasium, and optax (Adam) for training; the network itself is plain JAX.
 
 ```bash
 python3.12 -m venv rl/.venv
@@ -35,6 +38,22 @@ rl/.venv/bin/python -m labyrinthe_rl.bench --size 5 --deals 1000 --pairs expert:
 ```
 
 ```bash
+rl/.venv/bin/python -m labyrinthe_rl.train_explorer --size 4 --run rl/runs/explorer-4x4
+```
+
+```bash
+rl/.venv/bin/python -m labyrinthe_rl.train_explorer --run rl/runs/explorer-4x4 --resume --iterations 2000
+```
+
+```bash
+rl/.venv/bin/python -m labyrinthe_rl.bench --size 5 --deals 1000 --pairs learned:hard,learned:expert
+```
+
+```bash
+rl/.venv/bin/python -m labyrinthe_rl.exploit --size 5 --bots learned,hard,expert
+```
+
+```bash
 rl/.venv/bin/python -m labyrinthe_rl.throughput --sizes 5,10
 ```
 
@@ -43,9 +62,14 @@ node scripts/export-fixtures.mjs
 ```
 
 - `pytest rl`: parity with the JS engine plus unit tests (about a minute).
+- `train_explorer`: trains the learned explorer (see below). It writes checkpoints and logs into
+  `--run` (`rl/runs/` is git-ignored); `--resume` continues a run; `--init` starts from another
+  run's parameters, of any board size. Every field of `Config` is an option (`--envs`, `--lr`,
+  `--mix`, `--walls`, ...).
 - `bench`: duplicate-format evaluation of two bots. Options: `--pairs hard:normal,...`,
-  `--mazes bots|random|uniform`, `--walls`, `--seed`. Bots: `easy`, `normal`, `hard`, and `expert`
-  (P2's bar, run by Node; `--particles`, default 200).
+  `--mazes bots|random|uniform`, `--walls`, `--seed`. Bots: `easy`, `normal`, `hard`, `expert`
+  (P2's bar, run by Node; `--particles`, default 200), and `learned` (`--checkpoint`, by default the
+  committed `rl/checkpoints/explorer-NxN.npz`).
 - `throughput`: batched explorer steps/s on this machine. Options: `--obs` also computes the lattice
   observation, `--devices 8` splits the batch over 8 CPU devices.
 - `export-fixtures.mjs`: regenerates `rl/tests/fixtures/` after a change to the JS rules or bots;
@@ -64,6 +88,10 @@ node scripts/export-fixtures.mjs
 | `planner.py` | the same bots batched in JAX (same decisions, JAX randomness): `choose`, `explore_mazes` (a work queue of games), `design` |
 | `bench.py` | duplicate-format evaluator |
 | `expert.py` | the expert explorer (`src/bot/expert.js`, D21) as a bench bot, run by Node through `scripts/expert-solve.mjs`. Not ported: see below |
+| `network.py` | the explorer's network (D17, D23): a residual convolutional tower over the lattice, policy / belief / hit heads, any board size. Plain JAX, parameters in a dict |
+| `train_explorer.py` | PPO training of the explorer against a mix of designers: maze pools, batched rollouts, GAE, the belief loss, held-out evaluation, checkpoints |
+| `learned.py` | checkpoints (`save`, `load`), and batched explorations with a network as policy (`explore_mazes`, greedy by default; `Explorer` for the bench) |
+| `exploit.py` | an adversarial pick (the worst of 32 fresh mazes for each explorer), a cheap proxy for exploitability |
 | `throughput.py` | steps/s benchmark |
 | `env.py` | a Gymnasium wrapper (`Labyrinthe-Explorer-v0`) for standard tooling. Training will use the batched functions directly |
 
@@ -122,6 +150,60 @@ The expert explorer is not ported: `bench` runs `src/bot/expert.js` itself, in N
 `expert.explore_mazes(walls, entrance, exit, key, particles=200, workers=None, options=None)` takes
 the same stacked mazes as the planner. `options` go to expert.js as they are, e.g.
 `{"search": "greedy"}`.
+
+### Training the explorer (`train_explorer.py`, [D23](../docs/DECISIONS.md))
+
+PPO on the explorer's side of a round, against fixed designers (P2: the designer doesn't learn yet).
+- **Games:** `--envs` (256) games run in parallel. Each iteration plays `--horizon` (32) probes in
+  every game with the sampled policy, then runs `--epochs` (3) PPO epochs over those 8,192 samples
+  in minibatches of `--minibatch` (512). A game that ends restarts on a new maze at once.
+- **Mazes:** each new game draws a designer from `--mix` (default
+  `uniform:0.2,random:0.15,normal:0.15,hard:0.3,adversary:0.2`), then one of its mazes. The wall budget is drawn from a band around the game's default (`--walls`,
+  default ± 2: 5–9 on 4×4, 10–14 on 5×5; D15); the network reads it from its input planes.
+  - Uniform and `randomMaze` mazes are cheap: a pool of 16,384 each, of which 2,048 are replaced
+    every iteration.
+  - Designed mazes (`normal`, `hard`: the best of 6 or 30 random mazes against the hard explorer)
+    are slow, ≈ 150 hard mazes/s on 5×5. 40,000 per designer are made once, on every CPU core, and
+    cached in `rl/runs/pools/` for later runs.
+  - `adversary` aims at the learner itself: every iteration, 128 of its 4,096 mazes are replaced
+    by new picks, each the worst of 8 fresh randomMaze and uniform mazes (same budget) for the
+    current greedy policy.
+- **Learning signal:** reward −1 per wall hit, undiscounted, GAE(λ = 0.95).
+- **Losses:**
+  - PPO's clipped surrogate (clip 0.2) and an entropy bonus (0.01);
+  - the value's squared error (× 0.05: the value sums one term per side, so its gradient is large);
+  - the belief's cross-entropy against the true maze, on the unknown sides (× 1).
+  - Adam, learning rate 3·10⁻⁴, gradients clipped to norm 1.
+- **Evaluation:** every `--eval-every` (25) iterations, the greedy policy explores 512 held-out mazes
+  from each designer (uniform, randomMaze, normal, hard) at the default budget. The log line puts
+  three references next to it, measured once per run on the same mazes (`refs.json`): the hard
+  explorer, a uniformly random explorer, and the expert (on the first 256). It also reports the
+  worst of 32 candidates per round over 128 rounds (`--eval-worst`, see `exploit` below).
+- **Outputs** in `--run`:
+  - `checkpoint.npz`: parameters, Adam state, counters and random key, written every
+    `--save-every` (25) iterations and on exit, Ctrl-C or SIGTERM included;
+  - `snap-NNNNNN.npz`: parameters only, every `--snapshot-every` (100) iterations, for later
+    leagues;
+  - `log.jsonl`: one record per iteration (losses, walls hit per designer, evals);
+  - `refs.json` and `config.json`.
+- **Resume:** `--resume` reloads the checkpoint and keeps the run's config. Only `--iterations`,
+  the eval / save periods and `--mix` (a curriculum) may change. The games in flight restart on new
+  mazes.
+- **Planner prior** (`--plan true`, experimental, off by default): the policy logits also get
+  −w · (expected walls on the cheapest way to the exit through each probe), planned on the belief
+  head's P(wall) (`network.plan_scores`, the greedy planner of the expert's rollouts), with w learned.
+
+`learned.Explorer(path)` loads a checkpoint for play. `bench` uses it for the `learned` bot, which
+explores greedily (the most likely probe) and designs like hard, as the expert does. To make a run
+the bench's default, drop the optimizer state into `rl/checkpoints/`:
+
+```bash
+rl/.venv/bin/python -m labyrinthe_rl.learned rl/runs/explorer-5x5/checkpoint.npz rl/checkpoints/explorer-5x5.npz
+```
+
+`exploit` measures how exploitable an explorer is, with D21's adversarial pick: each round a
+designer keeps, out of 32 fresh mazes (16 randomMaze, 16 uniform), the one this explorer hits the
+most walls in. Options: `--bots learned,hard,expert`, `--rounds`, `--candidates`, `--checkpoint`.
 
 ## Parity with the JS engine
 
@@ -183,8 +265,74 @@ In the round as played the expert hits fewer walls than hard 99.7% of the time (
 D21 (5.3 of 12 walls on hard's mazes, beats hard in 99% of rounds). The expert designs like hard, so
 the designer edge against hard is ≈ 0. Expert vs hard takes 2 minutes.
 
+## Measured (P2, 2026-10-25, Apple M1, CPU)
+
+The committed explorers `rl/checkpoints/explorer-4x4.npz` and `explorer-5x5.npz` (32 channels ×
+4 blocks, default config). Each was trained by one `train_explorer` run from scratch. The 5×5 run
+started on the mix without the adversary and switched to the default mix at iteration 40 (`--resume
+--mix`).
+
+**Bench, mazes designed by the bots** (`bench --deals 1000`; learned and expert design like hard, so
+these are walls hit on hard's mazes):
+
+| board | pairing | hits A | hits B | explorer edge | score (dup) |
+|---|---|---|---|---|---|
+| 4×4, 7 walls | learned vs hard | 1.71 (0.24 W) | 6.86 (0.98 W) | +5.15 ± 0.04 | 100% |
+| 4×4, 7 walls | learned vs expert | 1.70 (0.24 W) | 1.88 (0.27 W) | +0.18 ± 0.03 | 56% ± 1 |
+| 4×4, 7 walls | expert vs hard | 1.91 (0.27 W) | 6.87 (0.98 W) | +4.96 ± 0.03 | 100% |
+| 5×5, 12 walls | learned vs hard | 4.09 (0.34 W) | 11.54 (0.96 W) | +7.45 ± 0.06 | 100% |
+| 5×5, 12 walls | learned vs expert | 4.17 (0.35 W) | 5.25 (0.44 W) | +1.08 ± 0.06 | 64% ± 1 |
+| 5×5, 12 walls | expert vs hard | 5.30 (0.44 W) | 11.54 (0.96 W) | +6.23 ± 0.05 | 100% |
+
+The learned explorer hits fewer walls than the expert on hard's mazes: by 0.18 on 4×4 and 1.08 on
+5×5. Expert vs hard reproduces D22 (5.29 vs 11.54). These three 5×5 pairings take 5 minutes (the
+expert runs in Node).
+
+**Robustness.** On uniform mazes (`--mazes uniform`), and under the adversarial pick (`exploit`,
+200 rounds, the worst of 32 candidates for each explorer):
+
+| board | uniform: learned / expert / hard | adversarial pick: learned / expert / hard |
+|---|---|---|
+| 4×4, 7 walls | 2.53 / 2.57 / 1.08 | 6.19 / 6.07 / 6.91 |
+| 5×5, 12 walls | 3.20 / 2.65 / 1.58 | 9.55 / 9.49 / 11.55 |
+
+Its weak spot is the expert's: what it assumes about designs. On uniform mazes, which have short
+direct paths, hard's straight-line planner is far better. Under the adversarial pick it is pushed
+about as high as the expert.
+
+**Learning curve** (greedy evaluation in the loop, default budget, held-out mazes per designer; the
+references in italics explored the same mazes):
+
+| board | probes | uniform | randomMaze | normal | hard | worst of 32 |
+|---|---|---|---|---|---|---|
+| 4×4, 7 walls | 0.2 M | 2.52 | 2.77 | 2.71 | 2.42 | 6.36 |
+| | 0.4 M | 2.47 | 2.64 | 2.52 | 2.22 | 6.38 |
+| | 0.8 M | 2.75 | 2.47 | 2.12 | 1.88 | 6.23 |
+| | 1.4 M | 2.47 | 2.31 | 1.82 | 1.70 | 6.12 |
+| | *expert* | *2.58* | *2.32* | *1.86* | *1.94* | |
+| | *hard* | *1.04* | *4.68* | *6.29* | *6.89* | *6.84* |
+| | *random explorer* | *3.03* | *6.13* | *6.67* | *6.73* | *7.00* |
+| 5×5, 12 walls | 0.2 M | 4.25 | 5.14 | 5.68 | 5.96 | |
+| | 0.4 M | 4.09 | 4.58 | 4.86 | 4.85 | 10.12 |
+| | 0.8 M | 3.76 | 4.63 | 4.77 | 4.52 | 10.22 |
+| | 1.2 M | 3.76 | 4.23 | 4.41 | 4.15 | 9.65 |
+| | 2.0 M | 3.18 | 4.39 | 4.28 | 4.12 | 9.52 |
+| | *expert* | *2.45* | *5.24* | *5.37* | *5.16* | |
+| | *hard* | *1.47* | *7.94* | *10.56* | *11.57* | *11.61* |
+| | *random explorer* | *5.12* | *10.87* | *11.66* | *11.72* | *12.00* |
+
+512 held-out mazes per designer (the expert explored the first 256 of them), 128 rounds of the
+worst-of-32 pick. Wall time: 65 min for 4×4 and 141 min for 5×5, the two runs sharing the CPU most
+of the time (≈ 200–450 probes/s each; ≈ 900 for 4×4 alone).
+
 ## Notes for P2
 
+- **XLA:CPU runs convolution gradients ~40× slower inside `lax.scan` than outside.** So the PPO
+  minibatch loop is Python around one compiled gradient step. Rollouts (forward passes only) are
+  fine inside `scan`.
+- **The network's gradient caps training speed:** ≈ 3,500 samples/s for the 85k-parameter net on
+  the M1's CPU, whatever the batch size or the number of XLA devices; the forward pass runs at
+  ≈ 13,000/s. A training step is ~90% gradients.
 - **On CPU, XLA is fast at elementwise work and slow at gathers inside loops.**
   - The planner's BFS runs on one bitmask per board row: 4× faster on 5×5, 9× on 10×10.
   - The lattice is built by interleaving reshapes: 14× faster than painting pixels by gathers, inside

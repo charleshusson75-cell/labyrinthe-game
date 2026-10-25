@@ -365,3 +365,119 @@ won). 1,000 deals of expert vs hard take 2 minutes (8 Node processes).
 - `bench` needs `node` on the PATH for the expert (CI has it). Its pytest is skipped without it.
 - If P2 needs the expert inside training (as a teacher or a rollout policy), a JAX port becomes worth
   it then.
+
+## D23 — P2's learned explorer: PPO with a belief head, against a mix of fixed designers (2026-10-25)
+
+**Context.** P2 trains the explorer against fixed designers (the designer learns in P3). D17 fixes the
+network's shape (convolutional over the lattice; policy, value and belief heads) and D19 the family
+(PPO, magnet-regularized, league). Left open: the framework, the network's size, the value head,
+the PPO details, which designers and in what proportion, how mazes are supplied, and how progress is
+measured.
+
+**Decision** (`rl/labyrinthe_rl/network.py`, `train_explorer.py`, `learned.py`).
+- **Network:** a residual convolutional tower over the (2N+1)² lattice: 32 channels × 4 blocks,
+  dilations 1, 2, 4, and a global-pooling bias in every block (mean and max over the board → dense →
+  added per channel, as in KataGo), so each pixel sees board-wide counts such as walls left. No
+  normalization layers (small last conv per block instead). 85k parameters, the same for every size.
+  - Three 1×1 heads read at the side pixels: **policy** (masked to legal probes), **belief**
+    (P(wall), cross-entropy against the true maze on the unknown sides), and **hit** (P(this side is
+    hit before the exit)).
+  - **Value = the sum of the hit head over the unknown sides**: the expected walls still to hit. It
+    is bounded by the unknown sides and scales with the board without any size-specific layer.
+- **Plain JAX, optax for Adam, no Flax.** Parameters are a dict of arrays and a checkpoint is a .npz
+  of named arrays plus a JSON record: what a hand-written browser forward pass (P4) needs. Flax 0.12
+  would add orbax, tensorstore and friends for no gain here.
+- **Size set by the CPU:** the network's gradient runs at ≈ 3,500 samples/s on the M1 whatever the
+  batch size or XLA device count; 48 channels × 6 blocks would be 3× slower.
+- **PPO:** 256 games × 32 probes per update, 3 epochs, minibatches of 512, clip 0.2, Adam 3·10⁻⁴,
+  gradient norm clipped to 1. Reward −1 per wall hit, undiscounted (every game ends within E probes),
+  GAE λ = 0.95. Loss weights: entropy 0.01, belief 1, value 0.05.
+  - **Value weight 0.05, not the usual 0.5:** the value sums one term per side, so its gradient is
+    large (global norm 36 vs 0.07 for the policy loss on a fresh network). At 0.5 the global clip
+    shrank every step and the policy barely moved (KL ≈ 10⁻⁴ per update instead of 10⁻²).
+  - **No magnet term (MMD / R-NaD) in P2.** Against a fixed designer mix the explorer solves a
+    single-agent POMDP; regularizing toward a magnet matters when both sides learn and cycle, so it
+    comes with P3.
+- **Designers:** each new game draws its maze from a mix: uniform among valid mazes 20%, randomMaze
+  15%, "normal" 15%, "hard" 30%, and an **adversary** 20%.
+  - Hard has the largest share because the bench measures on hard's mazes.
+  - The uniform share keeps the explorer honest on short direct paths, where a winding-maze prior
+    loses: the expert hits 2.45 walls on uniform 5×5 mazes, hard 1.47.
+  - The adversary aims at the learner itself, with the pick of D21's exploitability test. Every
+    iteration it re-picks 128 of its 4,096 mazes, each the worst of 8 fresh randomMaze and uniform
+    mazes (same budget) for the current greedy policy. It is P3's designer in miniature: an explorer
+    with a fixed idea of what mazes look like gets exploited (D21).
+  - Wall budgets: the default ± 2 (D15).
+- **Maze supply:** designed mazes are slow (≈ 150 hard mazes/s on 5×5), so 40,000 per designer are
+  made once on every core and cached; uniform and randomMaze pools (16,384) get 2,048 new mazes per
+  iteration.
+- **Evaluation in the loop:** every 25 iterations the greedy policy explores 512 held-out mazes per
+  designer at the default budget, next to the hard explorer, a uniformly random explorer and the
+  expert (256 of them) on the same mazes; plus the worst of 32 candidates over 128 rounds, a proxy
+  for exploitability (`exploit.py`).
+- **Bench:** the `learned` bot is the greedy policy of a checkpoint (default
+  `rl/checkpoints/explorer-NxN.npz`, committed), with hard's designer, like the expert.
+- **Planner prior: kept as an option, off.** `--plan true` adds to the policy logits
+  −w · (expected walls on the cheapest way to the exit through each probe, planned on the belief
+  head), i.e. the expert's rollout planner as a prior. It needs a good belief, and the belief head is
+  weak so far (see below).
+- **The minibatch loop is Python around one compiled gradient step:** XLA:CPU runs convolution
+  gradients ~40× slower inside `lax.scan`.
+
+**Measured** (Apple M1, CPU; one run per size from scratch, default config; ≈ 200–450 probes/s per
+run while two runs shared the machine, ≈ 900 alone on 4×4). The 5×5 run started without the
+adversary and got it at iteration 40 (`--resume --mix`).
+
+Bench, 1,000 deals, mazes designed by the bots (the learned bot and the expert design like hard, so
+these are walls hit on hard's mazes):
+
+| board | learned (A) vs | hits A | hits B | explorer edge | score (dup) |
+|---|---|---|---|---|---|
+| 4×4, 7 walls (1.45 M probes, 65 min) | hard | 1.71 | 6.86 | +5.15 ± 0.04 | 100% |
+| 4×4, 7 walls | expert | 1.70 | 1.88 | +0.18 ± 0.03 | 56% ± 1 |
+| 5×5, 12 walls (2.06 M probes, 141 min) | hard | 4.09 | 11.54 | +7.45 ± 0.06 | 100% |
+| 5×5, 12 walls | expert | 4.17 | 5.25 | +1.08 ± 0.06 | 64% ± 1 |
+
+Expert vs hard on the same deals: 1.91 vs 6.87 (4×4), 5.30 vs 11.54 (5×5, as in D22).
+
+Robustness: uniform mazes (bench `--mazes uniform`, 1,000 deals) and D21's adversarial pick (the
+worst of 32 fresh mazes, 16 randomMaze + 16 uniform, for each explorer; `exploit`, 200 rounds):
+
+| board | uniform: learned / expert / hard | worst of 32: learned / expert / hard |
+|---|---|---|
+| 4×4 | 2.53 / 2.57 / 1.08 | 6.19 / 6.07 / 6.91 |
+| 5×5 | 3.20 / 2.65 / 1.58 | 9.55 / 9.49 / 11.55 |
+
+(This setup's worst-of-32 numbers are higher than D21's 7.60 for the expert and 10.93 for hard,
+which came from expert.js with its own candidates; compare within a table.)
+
+**Findings.**
+1. **It learns fast.** On 4×4 it beats hard after ~0.1 M probes (5 minutes) and reaches the expert on
+   designed mazes at ~1.2 M. On 5×5 it is ahead of the expert on hard's mazes from 0.4 M probes on
+   (4.87 vs 5.16 on the same mazes), and at 4.1 from 1.2 M. Uniform mazes improve slowly (4.25 →
+   3.18). Neither run had plateaued on every designer when stopped.
+2. **The policy learns the designers' style; the belief head carries less.** On hard 4×4 mazes, the
+   belief head's cross-entropy is 0.49 nats per unknown side, vs 0.61 for the base rate (walls left
+   / unknown sides). A network of the same size trained on the belief alone, on the same states,
+   gets 0.47 before overfitting: the shared trunk doesn't starve it. Yet planning on these marginals
+   with the expert's greedy planner hits 4.2 of 7 walls on hard mazes, against 1.65 for the policy
+   head (and 1.3 vs 2.5 on uniform mazes, where it is better). Per-side marginals miss what the
+   policy uses. So the planner prior (`--plan`) stays off: after 0.2 M probes it was no better than
+   without (2.87 vs 2.62 walls on hard 4×4 mazes, both runs with the earlier value weight).
+3. **The weakness is the expert's: what an explorer assumes about designs can be used against it.**
+   On uniform mazes, which have short direct paths, hard (a straight-line planner) still does far
+   better. On 5×5 the expert does better there too. The worst-of-32 pick pushes the learned
+   explorer close to the budget, about as much as the expert. The adversary in the mix helped early:
+   at 0.2 and 0.4 M probes, 4×4 hit 0.25 and 0.5 fewer walls on uniform mazes than a run without
+   it. That run also used the larger value weight, so the two effects are mixed.
+4. **The value weight.** At the usual 0.5 the policy barely moved for the first ~20 updates (KL
+   10⁻⁴); at 0.05 it moves from the start. The value still explains ~50–70% of the variance of the
+   returns.
+
+**Next.**
+- **P3:** a designer that learns, against the learned explorer. That is the systematic fix for
+  finding 3; the adversary here is a fixed-budget stand-in.
+- **A belief that plans well:** e.g. a sampler of whole mazes (particles) conditioned by the network,
+  as the expert does, rather than per-side marginals (P6).
+- **More compute:** neither run had plateaued when stopped. A bigger network (48 × 6) is 3× slower
+  per sample on this CPU; a GPU would lift both limits.

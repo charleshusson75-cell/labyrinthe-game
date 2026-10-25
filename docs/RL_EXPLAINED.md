@@ -4,9 +4,10 @@ A plain-language companion to [RL_DESIGN.md](RL_DESIGN.md) (the technical plan) 
 [DECISIONS.md](DECISIONS.md) (the why). Written 2026-10-23 for someone with an ML background but
 no reinforcement-learning (RL) experience; state of the code as of 2026-10-25.
 
-**Short version:** nothing learns yet. What you play today is hand-built logic, and the learning
-machinery isn't trained or connected to the site. Humans can beat it because of two specific blind
-spots (§2), and the planned learning is aimed at exactly those.
+**Short version:** what you play today is hand-built logic. Humans can beat it because of two
+specific blind spots (§2), and the planned learning is aimed at exactly those. The first learned
+explorer (P2, 2026-10-25) exists in the training code: it beats the expert on bot-made mazes, but it
+isn't connected to the site yet.
 
 ---
 
@@ -92,8 +93,8 @@ nothing is remembered between rounds or between players.
      then join the league.
   3. Repeat: 4×4 → **5×5** → 8×8 → 10×10.
   4. Check against the exact 3×3 answers before trusting anything on 5×5.
-- **Status:** P0–P1 (foundation) and the non-learning expert are done. Next is P2, the learned
-  explorer, which must beat the expert.
+- **Status:** P0–P1 (foundation) and the non-learning expert are done. P2's first learned explorer
+  beats the expert on mazes made by the bots, but not yet on uniformly random ones (§7). Next is P3.
 
 ## 5. Track B — human-based adaptation (later)
 
@@ -128,8 +129,19 @@ needs real games, another reason the logs matter.
 Each phase is a self-contained piece of work with a written brief, run as its own Claude session.
 Each one ends with tests passing, the docs updated and a push, as P1 did. You decide what starts.
 
-**Phase P2 (learned explorer), in order:**
-1. **The network** (`rl/labyrinthe_rl/model.py`): a convolutional network on the maze image (Flax +
+**Phase P2 (learned explorer): first runs done 2026-10-25** ([D23](DECISIONS.md)). It differs
+from the plan below in three ways:
+- the network is plain JAX + Optax (no Flax);
+- the P(wall) head trains together with the move head instead of first;
+- the designer mix includes an adversary that keeps the mazes the current explorer handles worst.
+
+Planning on the learned P(wall) alone turned out weaker than the learned move head, so the "quick
+check" in step 2 wasn't the useful lever. Go/no-go: met on bot-made 5×5 mazes (4.2 walls of 12 vs
+5.3 for the expert, 1,000 deals). Not met on uniformly random mazes (3.2 vs 2.7 for the expert,
+1.6 for hard).
+
+The plan as written before the work:
+1. **The network** (`rl/labyrinthe_rl/network.py`): a convolutional network on the maze image (Flax +
    Optax on top of JAX), with the three heads from §4 (move, expected walls, P(wall)).
 2. **Teach it where walls are, by supervised learning first.**
    - *Data:* generate mazes with the existing designers plus a "winding" generator. Play partial

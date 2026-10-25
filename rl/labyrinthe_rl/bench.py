@@ -3,6 +3,7 @@
     python -m labyrinthe_rl.bench [--size 5] [--walls W] [--deals 500] [--seed 0]
                                   [--pairs hard:easy,hard:normal,normal:easy,hard:hard]
                                   [--mazes bots|random|uniform] [--particles 200]
+                                  [--checkpoint rl/checkpoints/explorer-5x5.npz]
 
 Each deal is a pair of mazes (a, b): designed by bots A and B (`--mazes bots`, as in a real round),
 or dealt by a sampler. Both bots explore both mazes, i.e. play both seats:
@@ -13,8 +14,10 @@ a seat is worth 1 to whoever hit fewer walls and ½ each when equal: a score tha
 who starts. Explorations of the same maze share their random key, and each bot's mazes are made
 once and reused in every pairing.
 
-Bots: easy, normal, hard (src/bot/brain.js, batched in planner.py) and expert (src/bot/expert.js run
-by Node, see expert.py; it designs like hard, as in the game).
+Bots: easy, normal, hard (src/bot/brain.js, batched in planner.py), expert (src/bot/expert.js run
+by Node, see expert.py; it designs like hard, as in the game) and learned (the network trained by
+train_explorer.py, loaded from `--checkpoint`, by default the committed one for the board size; it
+explores greedily and designs like hard too).
 
 Columns, per pairing A:B:
     hits A, hits B    walls hit as explorer (mean over both seats) and as a share of the budget W
@@ -32,7 +35,7 @@ from typing import Callable
 import jax
 import numpy as np
 
-from . import expert, planner
+from . import expert, learned, planner
 from .geometry import default_wall_budget, max_wall_budget
 from .mazes import sample_mazes
 
@@ -62,6 +65,12 @@ def expert_bot(particles: int = expert.PARTICLES) -> Bot:
         design=BOTS["hard"].design,
         explore=lambda w, e, s, key: expert.explore_mazes(w, e, s, key, particles),
     )
+
+
+def learned_bot(checkpoint, greedy: bool = True) -> Bot:
+    """The learned explorer of a checkpoint (train_explorer.py), with hard's designer."""
+    explorer = learned.Explorer(checkpoint, greedy)
+    return Bot(name="learned", design=BOTS["hard"].design, explore=explorer.explore)
 
 
 BOTS = {level: heuristic(level) for level in planner.LEVEL_INDEX}
@@ -164,11 +173,18 @@ def main(argv=None):
     ap.add_argument("--mazes", default="bots", choices=["bots", "random", "uniform"])
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--particles", type=int, default=expert.PARTICLES, help="particles of the expert explorer")
+    ap.add_argument("--checkpoint", default=None, help="the learned explorer (default: rl/checkpoints/explorer-NxN.npz)")
     args = ap.parse_args(argv)
     bots = {**BOTS, "expert": expert_bot(args.particles)}
     pairs = [tuple(pair.split(":")) for pair in args.pairs.split(",")]
-    if any(len(p) != 2 or not set(p) <= bots.keys() for p in pairs):
-        ap.error(f"--pairs is a list of A:B, with bots among {', '.join(bots)}")
+    if any(len(p) != 2 or not set(p) <= bots.keys() | {"learned"} for p in pairs):
+        ap.error(f"--pairs is a list of A:B, with bots among {', '.join(bots)}, learned")
+    if any("learned" in p for p in pairs):
+        checkpoint = args.checkpoint or learned.default_checkpoint(args.size)
+        try:
+            bots["learned"] = learned_bot(checkpoint)
+        except FileNotFoundError:
+            ap.error(f"no learned explorer at {checkpoint} (train one with train_explorer, or pass --checkpoint)")
     walls = args.walls or default_wall_budget(args.size)
     if not 1 <= walls <= max_wall_budget(args.size):
         ap.error(f"walls must be 1..{max_wall_budget(args.size)} on a {args.size}×{args.size} board")
