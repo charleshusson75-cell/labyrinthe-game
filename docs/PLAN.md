@@ -120,8 +120,17 @@ Full design: [RL_DESIGN.md](RL_DESIGN.md); decisions D15–D20 (2026-10-22), D21
     - the adversarial pick (worst of 32 mazes) still pushes it near the budget, like the expert;
     - the belief head barely beats the base rate, so planning on it (`--plan`) doesn't help yet;
     - ≈ equilibrium values on 3×3 (needs boards < 4 in training).
-- P3: league self-play on 5×5 — runs on Kaggle T4 × 2 (D24): GPU calibration, then stage 0 (P2's
-  recipe with a bigger network), then league runs; evaluation on the Mac
+- P3: league self-play on 5×5 — runs on Kaggle T4 × 2 (D24); evaluation on the Mac
+  - ✅ Code (2026-10-26, [D25](DECISIONS.md)): the learned designer (`designer.py`: E, S, then walls,
+    cut sides masked), the league (`league.py`: PFSP over snapshots, exploiters and anchors, magnet
+    regularization, exploiter worker on the second GPU), `bench --designers`, the `p3` bots, the
+    Kaggle runner (`rl/kaggle/`: kernel template, `drive.py`, private dataset `labyrinthe-p3`)
+  - ✅ GPU calibration (2026-10-26, [D26](DECISIONS.md)): T4 trains 6,330 probes/s with 32 × 4,
+    1,936 with 64 × 6, 724 with 96 × 8 (Mac: 462 / 81). Only 32 × 4 clears 5,000 → P3 keeps P2's
+    network size, in fp32 (fp16 gained nothing). 0.24 GPU h
+  - 🟡 Stage 0: P2's recipe on the GPU from scratch (1,024 games), plus a designer against P2's
+    explorer on the second GPU
+  - ⬜ League runs (~11 h each), evaluated on the Mac between runs
 - P4: ship
 - P5: scale to 8×8/10×10
 - P6: play-time search

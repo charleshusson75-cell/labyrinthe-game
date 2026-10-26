@@ -79,7 +79,9 @@ class Config(train_explorer.Config):
     d_epochs: int = 3
     d_minibatch: int = 2048
     d_lr: float = 1e-3  # 3e-4 barely moved the designer (one noisy reward per ~14 decisions)
-    d_entropy: float = 0.01
+    d_entropy: float = 0.01  # the entropy bonus's coefficient (its floor, with a target)
+    d_entropy_target: float = 0.5  # nats per wall decision kept by raising the coefficient (0: fixed coefficient)
+    d_entropy_rate: float = 1.0  # dual step: log(coefficient) += rate · (target − wall entropy) per iteration
     d_value_coef: float = 0.1
     d_magnet: float = 0.02
     designer_init: str = ""
@@ -399,6 +401,7 @@ class DesignerLearner:
         self.opt_state = self.opt.init(params) if opt_state is None else opt_state
         self.magnet = magnet if cfg.d_magnet else None
         self.n_steps = designer.steps(max(wall_band(cfg)))
+        self.ent_coef = cfg.d_entropy
 
     def generate(self, budgets, key) -> tuple:
         final, batch = designer.rollout(self.params, jnp.asarray(budgets, jnp.int32), key, self.cfg.size, self.n_steps, self.dilations, self.magnet)
@@ -406,15 +409,22 @@ class DesignerLearner:
         return mazes, batch
 
     def learn(self, batch, reward, key) -> dict:
-        self.params, self.opt_state, stats = self.update(self.params, self.opt_state, batch, reward, key)
+        """One PPO update. With an entropy target, the bonus's coefficient then moves (dual ascent) so
+        the entropy per wall decision, i.e. the variety of walls given E and S, stays at the target."""
+        self.params, self.opt_state, stats = self.update(self.params, self.opt_state, batch, reward, key, self.ent_coef)
         if self.magnet is not None:
             self.magnet = ema(self.magnet, self.params, self.cfg.magnet_rate)
-        return {k: float(v) for k, v in stats.items()}
+        stats = {k: float(v) for k, v in stats.items()}
+        stats["entropy_coef"] = self.ent_coef
+        if self.cfg.d_entropy_target:
+            step = self.cfg.d_entropy_rate * (self.cfg.d_entropy_target - stats["wall_entropy"])
+            self.ent_coef = float(np.clip(self.ent_coef * np.exp(step), self.cfg.d_entropy, 1.0))
+        return stats
 
 
 def seq_entropy(batch) -> float:
-    """Mean −log p(decision sequence) of the sampled mazes: an upper bound of the maze distribution's
-    entropy (a maze has W! wall orders), nats."""
+    """Mean −log p(decision sequence) of the sampled mazes, nats: the entropy of the designer's maze
+    distribution (one sequence per maze, in canonical order), estimated on the batch."""
     return float(-jnp.mean(jnp.sum(jnp.where(batch.valid, batch.logp, 0.0), axis=0)))
 
 
@@ -483,7 +493,7 @@ def exploit_designer(cfg: Config, x_params, x_dil, d_main, d_dil, key, deadline:
     explorer's walls hit on the exploiter's mazes − on the main designer's, default budget."""
     ws = wall_band(cfg)
     k_init, k_eval, key = jax.random.split(key, 3)
-    dc = replace(cfg, d_magnet=0.0)
+    dc = replace(cfg, d_magnet=0.0, d_entropy_target=0.0)  # a best response: free to collapse
     init = d_main if cfg.exploit_init == "main" else designer.init_net(k_init, network.NetConfig(cfg.d_channels, cfg.d_blocks, network.NetConfig().dilations))
     learner = DesignerLearner(dc, init)
     rng = np.random.default_rng(int(jax.random.randint(k_init, (), 0, 2**31 - 1)))
@@ -527,6 +537,7 @@ def designer_vs(cfg: Config, run, target: str, log=print) -> None:
         learner = DesignerLearner(dc, dp)
         learner.opt_state = learned.unflatten(learner.opt.init(dp), arrays, "opt")
         it, total, elapsed = meta["iteration"], meta["d_mazes"], meta["elapsed"]
+        learner.ent_coef = meta.get("entropy_coef", cfg.d_entropy)
         key = jax.random.wrap_key_data(jnp.asarray(meta["key"], dtype=jnp.uint32))
         log(f"resuming {ckpt} at iteration {it}")
     else:
@@ -541,7 +552,7 @@ def designer_vs(cfg: Config, run, target: str, log=print) -> None:
 
     def save():
         meta = _net_meta(cfg, "designer", cfg.d_channels, cfg.d_blocks, iteration=it, d_mazes=total, elapsed=elapsed,
-                         key=np.asarray(jax.random.key_data(key)).tolist(), target=path)
+                         key=np.asarray(jax.random.key_data(key)).tolist(), target=path, entropy_coef=learner.ent_coef)
         learned.save(ckpt, learner.params, meta, learner.opt_state)
 
     stop = {"now": False}
@@ -573,7 +584,7 @@ def designer_vs(cfg: Config, run, target: str, log=print) -> None:
                 }
             log_file.write(json.dumps(rec) + "\n")
             log_file.flush()
-            log(f"it {it:5d} {total / 1e6:6.2f}M mazes {rec['mazes_per_s']:5.0f}/s | hits {rec['hits']:.2f} | ent {stats['entropy']:.2f} seq {stats['seq_entropy']:.1f} kl {stats['kl']:.3f} ev {stats['explained_var']:.2f}")
+            log(f"it {it:5d} {total / 1e6:6.2f}M mazes {rec['mazes_per_s']:5.0f}/s | hits {rec['hits']:.2f} | H {stats['seq_entropy']:.1f} nats ({stats['wall_entropy']:.2f}/wall, coef {stats['entropy_coef']:.3f}) kl {stats['kl']:.3f} ev {stats['explained_var']:.2f}")
             if "eval" in rec:
                 e = rec["eval"]
                 log(f"  eval ({cfg.d_eval_mazes} mazes, {w} walls): target {e['target_greedy']:.2f} greedy / {e['target_sampled']:.2f} sampled, hard {e['hard']:.2f} | {designer.diversity_line(e)}")
@@ -698,6 +709,7 @@ class Trainer:
         self.key = jax.random.wrap_key_data(jnp.asarray(state["key"], dtype=jnp.uint32))
         self.it, self.env_steps, self.d_total, self.gens = state["iteration"], state["env_steps"], state["d_mazes"], state["generations"]
         self.elapsed, self.absorbed, self.exploits, self.last_eval = state["elapsed"], state["absorbed"], state["exploits"], state.get("eval")
+        self.d.ent_coef = state.get("d_entropy_coef", cfg.d_entropy)
         self.log(f"resuming {run} at iteration {self.it} ({self.env_steps / 1e6:.2f} M probes, {self.gens} generations)")
 
     def _populate(self, state):
@@ -762,6 +774,7 @@ class Trainer:
             "iteration": self.it, "env_steps": self.env_steps, "d_mazes": self.d_total, "generations": self.gens,
             "elapsed": self.elapsed, "key": np.asarray(jax.random.key_data(self.key)).tolist(),
             "absorbed": self.absorbed, "exploits": self.exploits, "eval": self.last_eval, "league": self.league.state(),
+            "d_entropy_coef": self.d.ent_coef,
         }
         tmp = run / "league.json.tmp"
         tmp.write_text(json.dumps(state, indent=1))
@@ -887,7 +900,7 @@ class Trainer:
                          + " ".join(f"{k} {v:.1f}" for k, v in rec["x_hits"].items())
                          + f" | ent {x['entropy']:.2f} kl {x['kl']:.3f} mag {x.get('magnet_kl', 0):.3f} bel {x['belief']:.3f}"
                          + f" | D {rec['d_hits']:.2f} (" + " ".join(f"{k} {v:.1f}" for k, v in rec["d_opp_hits"].items())
-                         + f") ent {d['entropy']:.2f} seq {d['seq_entropy']:.1f} kl {d['kl']:.3f} mag {d.get('magnet_kl', 0):.3f} ev {d['explained_var']:.2f}")
+                         + f") H {d['seq_entropy']:.1f} nats ({d['wall_entropy']:.2f}/wall, coef {d['entropy_coef']:.3f}) kl {d['kl']:.3f} mag {d.get('magnet_kl', 0):.3f} ev {d['explained_var']:.2f}")
                 if "eval" in rec:
                     self.log(self.eval_line(rec["eval"]))
                 if cfg.exploiters == "worker" and self.it % 5 == 0:

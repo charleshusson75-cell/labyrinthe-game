@@ -23,19 +23,46 @@ def random_states(size, count, seed):
     return walls, entrance, exit
 
 
-@pytest.mark.parametrize("size", [3, 4, 5])
-def test_cut_mask_matches_brute_force(size):
+def partial_states(size, count, seed):
+    """Designer states partway through the walls (a random policy, stopped at a random step)."""
+    rng = np.random.default_rng(seed)
+    states = []
+    for i in range(count):
+        budget = int(rng.integers(1, (size - 1) ** 2 + 1))
+        s = designer.init(budget, size)
+        for _ in range(int(rng.integers(2, budget + 2))):
+            _, legal = designer.observe(s, size)
+            s = designer.step(s, int(rng.choice(np.flatnonzero(np.asarray(legal)))), size)
+        states.append(s)
+    return states
+
+
+def test_next_wall_mask_matches_brute_force():
+    """On 3×3, side e can take the next wall exactly when some completion (the walls left among the
+    sides after e) keeps S reachable from E."""
+    from itertools import combinations
+
+    size = 3
     g = geometry(size)
-    walls, entrance, exit = random_states(size, 24, seed=size)
-    cut = jax.vmap(partial(designer.cut_mask, size=size))(jnp.asarray(walls), jnp.asarray(entrance), jnp.asarray(exit))
-    for w, e, s, c in zip(walls, entrance, exit, np.asarray(cut)):
-        for edge in range(g.n_edges):
-            if w[edge]:
-                assert not c[edge]
-                continue
-            closed = w.copy()
-            closed[edge] = True
-            assert c[edge] == (distances_from(g, closed, int(e))[int(s)] < 0)
+    checked = 0
+    for s in partial_states(size, 40, seed=1):
+        if bool(s.done):
+            continue
+        left = int(s.budget - s.placed)
+        mask = np.asarray(designer.next_wall_mask(s.walls, s.last, s.entrance, s.exit, left, size))
+        walls = np.asarray(s.walls)
+        for e in range(g.n_edges):
+            ok = False
+            if e > int(s.last) and not walls[e]:
+                for rest in combinations(range(e + 1, g.n_edges), left - 1):
+                    w = walls.copy()
+                    w[[e, *rest]] = True
+                    if distances_from(g, w, int(s.entrance))[int(s.exit)] >= 0:
+                        ok = True
+                        break
+            assert mask[e] == ok
+            checked += 1
+    assert checked > 100
 
 
 def test_distances_match_bfs():
@@ -71,16 +98,19 @@ def test_observation_and_legal_moves():
     s = designer.step(s, 5, size)
     _, legal = designer.observe(s, size)
     assert not bool(legal[5]) and int(legal[: size * size].sum()) == size * size - 1  # placing S ≠ E
-    s = designer.step(s, 6, size)  # S next to E; with no walls yet, their shared side isn't a cut
+    s = designer.step(s, 6, size)  # S next to E
     obs, legal = designer.observe(s, size)
-    shared = geometry(size).edge_between(5, 6)
-    assert bool(legal[size * size + shared]) and int(legal[: size * size].sum()) == 0
-    assert int(legal.sum()) == n_edges(size) and float(obs[..., designer.CUT].sum()) == 0
-    assert float(obs[1, 1, designer.PATH]) == pytest.approx(1 / 16)
+    assert int(legal[: size * size].sum()) == 0 and float(obs[1, 1, designer.PATH]) == pytest.approx(1 / 16)
+    # 5 walls to place among 24 sides: the last 4 sides can't come first (no room for the rest after them)
+    assert np.flatnonzero(np.asarray(legal[size * size :])).tolist() == list(range(n_edges(size) - 4))
+    assert float(obs[..., designer.LEGAL].sum()) == n_edges(size) - 4
+    order = []
     for _ in range(5):
         _, legal = designer.observe(s, size)
-        s = designer.step(s, int(np.flatnonzero(np.asarray(legal))[0]), size)
-    assert bool(s.done) and int(s.walls.sum()) == 5
+        a = int(np.flatnonzero(np.asarray(legal))[-1])  # the latest side allowed: walls end up packed at the end
+        order.append(a - size * size)
+        s = designer.step(s, a, size)
+    assert bool(s.done) and int(s.walls.sum()) == 5 and order == sorted(order) and int(s.last) == order[-1]
     _, legal = designer.observe(s, size)
     assert np.flatnonzero(np.asarray(legal)).tolist() == [0]  # padding
 
@@ -113,6 +143,20 @@ def test_designer_learns_against_a_fixed_explorer():
         learner.learn(batch, hits.astype(np.float32), k3)
         first.append(hits.mean())
     assert np.mean(first[-3:]) > np.mean(first[:3])
+
+
+def test_entropy_target_raises_the_coefficient():
+    """With a target the wall decisions can't reach, the entropy bonus's coefficient goes up after an
+    update; with a target they exceed, it stays at its floor (the configured coefficient)."""
+    for target, rises in ((50.0, True), (1e-3, False)):
+        cfg = league.Config(size=4, walls="7", d_channels=8, d_blocks=2, d_mazes=64, d_minibatch=128, d_entropy=0.01, d_entropy_target=target)
+        learner = league.DesignerLearner(cfg, designer.init_net(jax.random.key(0), network.NetConfig(8, 2)))
+        mazes, batch = learner.generate(np.full(64, 7), jax.random.key(1))
+        stats = learner.learn(batch, np.ones(64, np.float32), jax.random.key(2))
+        assert 0 < stats["wall_entropy"] < stats["entropy"] + 1 and stats["entropy_coef"] == 0.01
+        assert (learner.ent_coef > 0.01) == rises and learner.ent_coef >= 0.01
+    # the maze entropy is the sequence entropy: a batch of identical sequences would score 0
+    assert league.seq_entropy(batch) > 0
 
 
 def test_diversity_counts_repeats():

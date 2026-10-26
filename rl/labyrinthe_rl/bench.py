@@ -19,7 +19,8 @@ once and reused in every pairing.
 Bots: easy, normal, hard (src/bot/brain.js, batched in planner.py), expert (src/bot/expert.js run
 by Node, see expert.py; it designs like hard, as in the game) and learned (the network trained by
 train_explorer.py, loaded from `--checkpoint`, by default the committed one for the board size; it
-explores greedily and designs like hard too). P3 (league.py): p3, its explorer (greedy) and its
+explores greedily and designs like hard too); learned-b is a second one (`--checkpoint-b`), to compare
+two checkpoints head to head. P3 (league.py): p3, its explorer (greedy) and its
 designer (sampled), from `--p3-explorer` / `--p3-designer` (default: the committed
 rl/checkpoints/p3-explorer-NxN.npz and p3-designer-NxN.npz) or a league run's latest (`--p3-run`);
 p3-sampled, the same with the explorer sampling its probes.
@@ -79,10 +80,10 @@ def expert_bot(particles: int = expert.PARTICLES) -> Bot:
     )
 
 
-def learned_bot(checkpoint, greedy: bool = True) -> Bot:
+def learned_bot(checkpoint, greedy: bool = True, name: str = "learned") -> Bot:
     """The learned explorer of a checkpoint (train_explorer.py), with hard's designer."""
     explorer = learned.Explorer(checkpoint, greedy)
-    return Bot(name="learned", design=BOTS["hard"].design, explore=explorer.explore)
+    return Bot(name=name, design=BOTS["hard"].design, explore=explorer.explore)
 
 
 def p3_bot(explorer_path, designer_path, greedy: bool = True, name: str = "p3") -> Bot:
@@ -232,6 +233,7 @@ def main(argv=None):
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--particles", type=int, default=expert.PARTICLES, help="particles of the expert explorer")
     ap.add_argument("--checkpoint", default=None, help="the learned explorer (default: rl/checkpoints/explorer-NxN.npz)")
+    ap.add_argument("--checkpoint-b", default=None, help="a second learned explorer, the bot learned-b")
     ap.add_argument("--p3-explorer", default=None, help="P3's explorer (default: rl/checkpoints/p3-explorer-NxN.npz)")
     ap.add_argument("--p3-designer", default=None, help="P3's designer (default: rl/checkpoints/p3-designer-NxN.npz)")
     ap.add_argument("--p3-run", default=None, help="take P3's agents from a league run directory")
@@ -239,7 +241,7 @@ def main(argv=None):
     ap.add_argument("--explorers", default="hard,expert,learned", help="the explorers that score --designers")
     args = ap.parse_args(argv)
     bots = {**BOTS, "expert": expert_bot(args.particles)}
-    lazy = {"learned", "p3", "p3-sampled"}
+    lazy = {"learned", "learned-b", "p3", "p3-sampled"}
     if args.designers:
         wanted = set(args.designers.split(",")) | set(args.explorers.split(","))
         known = bots.keys() | lazy | {"uniform", "random"}
@@ -256,6 +258,10 @@ def main(argv=None):
             bots["learned"] = learned_bot(checkpoint)
         except FileNotFoundError:
             ap.error(f"no learned explorer at {checkpoint} (train one with train_explorer, or pass --checkpoint)")
+    if "learned-b" in wanted:
+        if not args.checkpoint_b:
+            ap.error("learned-b needs --checkpoint-b")
+        bots["learned-b"] = learned_bot(args.checkpoint_b, name="learned-b")
     if wanted & {"p3", "p3-sampled"}:
         xp, dp = p3_paths(args.size, args.p3_run)
         xp, dp = args.p3_explorer or xp, args.p3_designer or dp

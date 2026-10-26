@@ -596,3 +596,90 @@ Kaggle.
 - *Data parallelism over the two T4s* for one training run. The networks are small, so two
   independent processes (main training + exploiters, or two stage-0 variants) use both GPUs with no
   communication. Revisit if calibration shows one GPU can't reach 5,000 probes/s with the chosen net.
+
+## D26 — GPU calibration: P3 keeps P2's 32 × 4 network; fp32; one process per GPU (2026-10-26)
+
+**Context.** D24's rule: measure training probes/s on Kaggle's T4 × 2 for 32 × 4, 64 × 6 and 96 × 8,
+keep the largest that trains ≥ 5,000 probes/s, and stay on the Mac if the GPU isn't ≥ 5× faster.
+
+**Measured** (`calibrate`, 5×5; one iteration = train_explorer's: adversary picks, 1,024 games ×
+32 probes, 3 PPO epochs in minibatches of 2,048; both GPUs busy at once, as in training; designer =
+512 mazes made, explored by an explorer of the same size, PPO; Mac = Apple M1 CPU with P2's 256 games
+and minibatches of 512):
+
+| network | parameters | T4, fp32 | T4, fp16 convs | designer, T4 | Mac (M1) | T4 / Mac |
+|---|---|---|---|---|---|---|
+| 32 × 4 | 85 k | **6,330 probes/s** | 6,278 | 480 mazes/s | 462 | 13.7× |
+| 64 × 6 | 499 k | 1,936 | 1,761 | 142 | 81 | 24× |
+| 96 × 8 | 1.49 M | 724 | 652 | 51 | — | |
+
+64 × 6 with 2,048 games and minibatches of 4,096: 2,040 probes/s (barely better). 96 × 8 at that size
+ran out of the T4's 15 GB. The session took 0.24 GPU hours.
+
+**Decision.**
+- **Network: 32 × 4 for both roles**, the only size above 5,000 probes/s. A 10-hour league run is
+  then ≈ 150 M probes, ~75× P2's 5×5 run (P2 was sample-limited, not capacity-limited, D23).
+- **The GPU stays:** 13.7× the Mac at this size.
+- **fp32.** Half-precision convolutions (float32 accumulation) gave nothing: at 11 × 11 pixels and
+  ≤ 96 channels the T4 isn't limited by arithmetic. The 64 × 6 run uses ~2 of the T4's 8 fp32 TFLOPS.
+- **No data parallelism:** even split over two T4s, 64 × 6 would stay under 5,000. Both GPUs run
+  their own process instead (D25): main training and the exploiter worker.
+- **Designer learning rate 10⁻³** (not the explorer's 3·10⁻⁴). On 4×4, against P2's explorer, 16
+  iterations of 512 mazes raised the walls hit from 2.6 to 3.3 at 3·10⁻⁴, 3.8 at 10⁻³ and 4.0 at
+  3·10⁻³, the mazes still all distinct. At 3·10⁻⁴ inside the league (256 mazes per iteration) the
+  policy hardly moved (KL ≈ 0.002 per update): one noisy reward per ~14 decisions gives Adam a weak,
+  noisy gradient.
+- **Stage 0 (D24)** is therefore P2's recipe with P2's network size, from scratch, on the GPU with
+  4× more parallel games (1,024) and minibatches (2,048). The second GPU meanwhile trains a fresh
+  designer against P2's explorer (`--designer-vs p2`): how exploitable P2 is to a learned designer,
+  and a first designer.
+
+## D27 — Stage 0 beats P2; a learned designer breaks P2; canonical wall order and an entropy floor (2026-10-26)
+
+**Stage 0** (D24, D26): P2's recipe from scratch on one T4 (32 × 4, 1,024 games, minibatches of
+2,048, adversary refreshing 256 mazes per iteration): 12 M probes in 38 minutes (5,300 probes/s in the
+real loop). Bench, 1,000 deals:
+
+| stage 0 (A) vs | mazes | hits A | hits B | explorer edge | score (dup) |
+|---|---|---|---|---|---|
+| P2's checkpoint | hard's | 3.36 | 4.09 | +0.73 ± 0.05 | 59% ± 1 |
+| expert | hard's | 3.36 | 5.29 | +1.93 ± 0.06 | 75% ± 1 |
+| P2's checkpoint | uniform | 3.83 | 3.20 | −0.63 ± 0.06 | 42% ± 1 |
+
+On the same deals P2 vs the expert was 4.17 vs 5.25 (64%, D23). Stage 0 meets its bar on designed
+mazes and starts the league; it is worse than P2 on uniform mazes, and its worst-of-32 in the loop
+stays at 9.5 (P2 9.52). In-loop greedy evaluation on hard's held-out mazes: 5.20 walls at 0.8 M
+probes, 3.99 at 3.3 M, 3.30 at 10.6 M (P2: 4.12 at 2 M).
+
+**A learned designer breaks P2.** On the second GPU, a fresh designer trained only against P2's
+explorer (sampled policy, 1,024 mazes per iteration) made it hit **11.8 of 12 walls after 51 k mazes
+(2 minutes)** and 11.9 later, greedy or sampled; the hard planner hits only 5–7 on those mazes. P2 is
+nearly fully exploitable: D21's worst-of-32 (9.5) understated it. The designer collapsed onto a handful
+of mazes (7–30% distinct, 1–8 E/S pairs), which is what a best response to one fixed explorer is.
+
+**4×4 league smoke run** (Mac, explorer from P2's 4×4 checkpoint, D25's settings): in 80 iterations
+the main designer went from 2.3 to ~4 walls of 7 against the main explorer and stretched E→S paths
+from 3.6 to 9.9 steps, but its mazes went from 99% to 50% distinct (E/S pairs 103 → 20). The explorer
+memorized them; fresh designer exploiters still gained +2.4 and +3.4 walls. Mode collapse and cycling,
+as D19 feared.
+
+**The free wall order was hiding the collapse** (D25 chose it). A designer that always builds the same
+maze in a random order still scores log(W!)/W nats per wall decision (1.67 for 12 walls): the
+collapsed P2-exploiter showed 1.4–1.5 nats per decision with almost no distinct mazes. The entropy
+bonus paid for orders, not mazes.
+
+**Decision.**
+- **Canonical wall order:** walls are placed in increasing edge order (choosing side e settles every
+  side before it as open). One decision sequence = one maze, so the policy's entropy *is* the maze
+  entropy, reported exactly (`seq_entropy`). Validity by a look-ahead mask: e can take the next wall
+  iff (sides after e) − (fewest sides after e on an E→S path, by a 0-1 BFS) ≥ walls left − 1; it
+  matches brute force on 3×3 and never dead-ends. Learnability is unchanged: against P2's 4×4
+  explorer, 40 iterations of 512 mazes reach 6.5 walls of 7 (free order: 6.3).
+- **An entropy floor for the main designer:** the entropy bonus's coefficient (floor 0.01) rises by
+  dual ascent, log c += 1.0 · (0.5 − H_wall) per iteration, so the entropy per wall decision (the
+  variety of walls given E and S) stays ≥ 0.5 nats: ≥ 6 nats of walls per E/S pair on 5×5. Against a
+  fixed explorer (the hardest case) it dips once, then holds 0.5 with c ≈ 0.14. A faster step (3.0)
+  oscillated; a coefficient that could fall below its floor came back too late. E and S stay free to
+  concentrate: the 3×3 equilibrium picks its E/S pairs (RL_DESIGN §2).
+- Exploiter designers keep no floor: a best response may be a single maze.
+- The magnet and the league stay as in D25.

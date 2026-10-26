@@ -3,7 +3,8 @@
 Status: research plan. Written 2026-10-21, decisions taken 2026-10-22. Implemented so far: the
 exact solver (`research/exact_solve.mjs`), the benchmark (`scripts/benchmark.mjs`), P1: the
 training stack's foundation in `rl/` (§5.1), P2 step 0: the no-learning Bayesian explorer, shipped
-as the "expert" level (§5.2, D21), and P2's first learned explorers (§5.3, D23).
+as the "expert" level (§5.2, D21), P2's first learned explorers (§5.3, D23), and P3's designer and
+league, trained on Kaggle GPUs (§5.4, D24–D26; in progress).
 
 > **Decisions (2026-10-22, see [DECISIONS.md](DECISIONS.md) D15–D20)**
 > - **Saturation:** walls-hit ≈ W is an artifact of a predictable explorer. We train on walls hit,
@@ -271,7 +272,7 @@ with real players.
 | **P0 (done)** | Exact 3×3 solver; bot benchmark; 4×4–10×10 boards in the game | Ground-truth values in §2 |
 | **P1 ✅** (2026-10-22) | `rl/`: JAX engine (any size), lattice encoding, maze samplers, Python ports of today's bots, duplicate-format evaluator, JS→Python parity fixtures in CI (§5.1) | Parity green; ≥ 10⁵ explorer steps/s on 5×5 (CPU). **Met:** 203 fixtures reproduced exactly; 2.5 M steps/s on 5×5 on one CPU core (0.46 M with the hard planner as policy) |
 | **P2** | Explorer learning vs fixed designer mixes (random + "hard"), 4×4 → 5×5, with belief head. **Step 0 ✅** (2026-10-22): Bayesian explorer without learning, the "expert" level (§5.2). **Learned explorer 🟡** (2026-10-25, §5.3) | Fewer walls hit than the "hard" heuristic on 5×5 (step 0: 5.3 vs 7.8–11.5 of 12); now also fewer than "expert" (**met on hard's mazes**: 4×4 and 5×5, §5.3; not on uniform mazes); ≈ equilibrium values on 3×3 |
-| **P3** | Full league self-play on 5×5 (both roles, MMD-regularized PPO, exploiters) | Exploitability falls generation after generation; beats "hard" in duplicate matches |
+| **P3 🟡** (2026-10-26, §5.4) | Full league self-play on 5×5 (both roles, MMD-regularized PPO, exploiters), on Kaggle T4s | Exploitability falls generation after generation; beats "hard" in duplicate matches |
 | **P4** | Ship the 5×5 bot to the site (ONNX); levels = rating bands of checkpoints | < 50 ms per move in the browser |
 | **P5** | Scale: curriculum to 8×8 / 10×10 on a cloud GPU; re-pick default wall budgets (D15) | Near-equilibrium hits/W well below 1; still improving |
 | **P6** | Play-time search with belief particles; race-aware explorer | Measurable gain over the raw network |
@@ -382,6 +383,30 @@ The round scores match the JS benchmark (80% and 86%).
   shared trunk: per-side marginals just carry less than the policy has learned.
 - **The open weakness is the same as the expert's:** uniform mazes, where hard still does much
   better, and the adversarial pick. This is P3's job: a designer that learns.
+
+### 5.4 P3 — the designer learns too (in progress, 2026-10-26)
+
+`rl/labyrinthe_rl/designer.py`, `league.py`, `rl/kaggle/`; choices in [D25](DECISIONS.md) and
+[D26](DECISIONS.md), commands in [rl/README.md](../rl/README.md).
+
+**How it works.**
+- **Designer network:** the explorer's tower on the same lattice. It places E, then S, then the walls
+  one at a time; a wall can't go where it would cut S off from E, so every maze is valid. It sees BFS
+  distances from E and from S, since winding paths are what make mazes hard (D21).
+- **Reward:** the walls an explorer hits in its maze, minus the average for that explorer (the
+  designer doesn't know whom it faces).
+- **League:** the main explorer and designer train against each other (40% / 50% of their games)
+  and against frozen past versions, exploiters and fixed bots, sampled by how hard each one is for
+  them (PFSP). A pull toward a slowly moving average of each network (the magnet) keeps training from
+  going round in circles.
+- **Exploiters:** for each frozen generation, a fresh explorer trained only against its designer and
+  a fresh designer only against its explorer. What they gain over the main agents is the
+  exploitability estimate.
+- **Compute:** Kaggle "GPU T4 x2", one process per GPU (main training, exploiter worker). The T4
+  trains P2's 32 × 4 network at 6,330 probes/s (14× the Mac); bigger networks miss D24's 5,000
+  probes/s bar (D26).
+
+**Stages (D24):** calibration ✅, stage 0 (P2's recipe on the GPU) 🟡, league runs ⬜.
 
 ## 6. Open questions
 
