@@ -220,6 +220,11 @@ def test_league_runs_resumes_and_plays(tmp_path, capsys):
     assert "p3" in out and "uniform" in out and "distinct" in out
     exploit.main(["--size", "4", "--rounds", "4", "--bots", "p3,hard", "--p3-run", str(run)])
     assert "p3" in capsys.readouterr().out
+    from labyrinthe_rl import report
+
+    report.main([str(run), "--every", "2"])
+    out = capsys.readouterr().out
+    assert "| generation |" in out and "| 4 |" in out and "d:xg2" in out
 
 
 def test_worker_and_designer_vs(tmp_path):

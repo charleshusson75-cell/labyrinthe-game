@@ -131,6 +131,7 @@ rl/.venv/bin/python rl/kaggle/drive.py push league --hours 10.8 --net 64x6
 | `designer.py` | the learned designer (P3, D25): its game (E, S, then walls one at a time, cut sides masked), observation planes, network, batched sampling, PPO pieces, maze diversity statistics |
 | `league.py` | league self-play for both roles: PFSP over frozen snapshots, exploiters and anchors, magnet regularization, generations, exploiters (inline or a worker process), checkpoints |
 | `calibrate.py` | training throughput of the PPO loops per network size and precision |
+| `report.py` | a league run as Markdown tables: learning curves, the designer's variety and entropy, exploiters' gains per generation, the league's members |
 | `throughput.py` | steps/s benchmark |
 | `env.py` | a Gymnasium wrapper (`Labyrinthe-Explorer-v0`) for standard tooling. Training will use the batched functions directly |
 
