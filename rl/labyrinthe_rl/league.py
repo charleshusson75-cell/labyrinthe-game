@@ -642,7 +642,11 @@ def worker(cfg: Config, run, log=print) -> None:
         if not todo:
             time.sleep(20)
             continue
-        result = exploit_generation(cfg, run, todo[-1], deadline, log)
+        # the run's own settings (the main process may have written them after this worker started)
+        saved = json.loads((run / "config.json").read_text())
+        names = {f.name for f in fields(Config)}
+        gen_cfg = Config(**{**asdict(cfg), **{k: v for k, v in saved.items() if k in names}, "hours": cfg.hours})
+        result = exploit_generation(gen_cfg, run, todo[-1], deadline, log)
         if result:
             log(f"generation {todo[-1]} exploited: exploitability {result['exploitability']:+.2f} walls")
     log("exploiter worker done")
