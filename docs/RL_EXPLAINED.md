@@ -179,10 +179,20 @@ failure mode showed up just as quickly: against a fixed opponent it stops varyin
 handful of mazes. That is what GAN people call mode collapse, and a readable pattern is what humans
 exploit. Two fixes went in. The designer now places walls in a fixed order, so the measure of
 variety we reward can't be faked by shuffling the same walls. And the variety bonus grows
-automatically whenever the variety drops under a floor. The first full run is now training for
-~11 hours: the explorer and the designer against each other and against their own past versions.
-On the second GPU, "exploiters" are trained to beat frozen copies of each, and they measure how
+automatically whenever the variety drops under a floor. The first full run then trained for
+~11 hours: the explorer and the designer against each other and against their own past versions,
+while "exploiters" on the second GPU were trained to beat frozen copies of each, to measure how
 much room for improvement is left.
+
+*Result of that run (D28).* The designer is the clear win: on its mazes the expert hits 6.65 of 12
+walls, where every hand-made designer stays under 5.4. Played as a whole bot, P3 wins about 4 rounds
+in 5 against P2 and 3 in 4 against the expert. The explorer, though, is no harder to fool than
+before. A fresh designer trained against a frozen copy still finds a maze where it hits 11 of 12
+walls, and the explorer's "defense" was to memorize that one maze, not to become robust. In game
+terms, it still plays almost deterministically, and a deterministic searcher can always be trapped
+by someone who knows it. That is exactly the 3×3 lesson in §3, point 4. The next run (proposed, not
+started) forces those trap-makers to vary their mazes so memorizing can't work, and lets the
+explorer randomize more.
 
 **Then P4–P5.** Each is the same pattern: brief → session → tests + measurements → push.
 - **P4:** shipping (§8).

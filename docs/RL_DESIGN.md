@@ -421,7 +421,16 @@ The round scores match the JS benchmark (80% and 86%).
 - **Against one fixed explorer the designer collapses** onto a handful of mazes, and with free wall
   order its per-step entropy hid it. Hence the canonical order and the entropy floor (D27).
 
-**Stages (D24):** calibration ✅, stage 0 ✅, league run 1 🟡 (2026-10-26), evaluation and run 2 ⬜.
+- **League run 1** (D28, 10.7 GPU h): the designer is the big gain. On its mazes the expert hits
+  6.65 walls of 12 (every earlier designer ≤ 5.4), P2 7.83, the hard planner 5.86; as a whole bot P3
+  wins 82% of rounds as played against P2 and 76% against the expert. The explorer did not become
+  more robust (worst of 32: 9.45), and exploiters still find +7 walls (+9.5 at generation 1).
+- **Why the explorer stays exploitable:** each designer exploiter collapses onto one maze where the
+  frozen explorer hits 11+ walls, and the main explorer just memorizes it. The fix is to make
+  exploiters (and the designer's E/S choice) keep variety, so robustness, not recognition, is what
+  pays; and to let the explorer randomize more (D28).
+
+**Stages (D24):** calibration ✅, stage 0 ✅, league run 1 ✅, run 2 ⬜ (D28's changes).
 
 ## 6. Open questions
 

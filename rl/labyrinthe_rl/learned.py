@@ -194,4 +194,4 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         sys.exit("usage: python -m labyrinthe_rl.learned SRC DST")
     m = export(sys.argv[1], sys.argv[2])
-    print(f"{sys.argv[2]}: {m['size']}×{m['size']} explorer, iteration {m['iteration']}, {m['env_steps'] / 1e6:.2f} M steps")
+    print(f"{sys.argv[2]}: {m['size']}×{m['size']} {m.get('kind', 'explorer')}, iteration {m['iteration']}, {m['env_steps'] / 1e6:.2f} M steps")

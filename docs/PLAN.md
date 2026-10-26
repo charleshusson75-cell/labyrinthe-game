@@ -142,9 +142,14 @@ Full design: [RL_DESIGN.md](RL_DESIGN.md); decisions D15–D20 (2026-10-22), D21
     mazes, collapsing onto a few mazes ([D27](DECISIONS.md))
   - ✅ Designer fixes ([D27](DECISIONS.md)): canonical wall order (the policy entropy is the maze
     entropy) and an entropy floor of 0.5 nats per wall decision (dual ascent)
-  - 🟡 League run 1 (started 2026-10-26, 10.8 h session on Kaggle): explorer from stage 0, designer
-    from scratch, exploiters on the second GPU every 250 iterations
-  - ⬜ Evaluation on the Mac, then league run 2
+  - ✅ League run 1 (2026-10-26, [D28](DECISIONS.md)): 128.6 M probes, 4.0 M mazes, 15 generations,
+    10.7 GPU h. P3's designer makes the expert hit 6.65 walls of 12 (earlier designers ≤ 5.4) and P2
+    7.83; P3 wins 82% of rounds as played against P2 and 76% against the expert. But its explorer is
+    no more robust (worst of 32: 9.45; P2 9.55), designer exploiters still push it to 11+, and only
+    65% of P3's mazes are distinct. Milestone checkpoints: `rl/checkpoints/p3-*-5x5.npz`
+  - ⬜ League run 2 (proposed in D28, waiting for a check-in): exploiter designers and the main
+    designer's E/S under the entropy floor, more explorer entropy, resume from run 1. GPU used this
+    week: 11.62 h of 30
 - P4: ship
 - P5: scale to 8×8/10×10
 - P6: play-time search

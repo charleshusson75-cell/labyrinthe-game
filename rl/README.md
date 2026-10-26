@@ -294,6 +294,24 @@ most walls in. Options: `--bots learned,hard,expert`, `--rounds`, `--candidates`
   prints its jobs' last lines every 15 minutes), `drive.py fetch` (output into
   `rl/runs/kaggle/<time>/`), `drive.py quota` (GPU hours used this week).
 
+### Measured (P3, league run 1, 2026-10-26; [D28](../docs/DECISIONS.md))
+
+Kaggle T4, 32 × 4 networks: 3,925 iterations, 128.6 M probes and 4.0 M mazes in 10.55 h. The final
+agents are committed as `rl/checkpoints/p3-explorer-5x5.npz` and `p3-designer-5x5.npz` (the `p3` bot).
+
+`bench --designers p3,hard,uniform --explorers hard,expert,learned,learned-b,p3,p3-sampled`
+(1,000 mazes, 12 walls; learned-b = stage 0's explorer):
+
+| designer | hard | expert | P2 | stage 0 | P3 | P3 sampled | distinct | E→S |
+|---|---|---|---|---|---|---|---|---|
+| p3 | 5.86 | 6.65 | 7.83 | 7.85 | 6.10 | 6.27 | 65% | 9.0 |
+| hard | 11.54 | 5.31 | 4.05 | 3.32 | 4.01 | 4.51 | 100% | 15.1 |
+| uniform | 1.65 | 2.71 | 3.31 | 3.95 | 3.86 | 3.91 | 100% | 4.4 |
+
+`bench --pairs p3:learned,p3:expert` (1,000 deals): P3 vs P2, explorer edge +0.88, designer edge
++2.93, 82% of rounds as played; vs the expert +0.87, +1.75, 76%. `exploit`: worst of 32 for P3 9.45
+(P2 9.55). `report rl/runs/.../league-1` gives the learning curves and the exploiters' gains.
+
 ## Parity with the JS engine
 
 `rl/tests/fixtures/` holds 203 JSON files covering sizes 4–10:

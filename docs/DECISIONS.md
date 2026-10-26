@@ -683,3 +683,71 @@ bonus paid for orders, not mazes.
   concentrate: the 3×3 equilibrium picks its E/S pairs (RL_DESIGN §2).
 - Exploiter designers keep no floor: a best response may be a single maze.
 - The magnet and the league stay as in D25.
+
+## D28 — League run 1: a designer that beats every bot, an explorer still exploitable (2026-10-26)
+
+**Run** (`league --run runs/league-1` on Kaggle T4 × 2, 10.7 h session, commit b58c726): explorer
+from stage 0, designer from scratch, both 32 × 4; 1,024 games × 32 probes and 1,024 mazes per
+iteration; a generation every 250 iterations, exploiters (150 + 100 iterations, from scratch) on
+the second GPU. 3,925 iterations, **128.6 M probes, 4.0 M mazes, 15 generations** in 10.55 h of
+training (4,765 probes/s and 367 mazes/s). GPU used this week: 11.62 h of 30.
+
+**Measured on the Mac** (1,000 mazes or deals, 5×5, 12 walls; P3 = the final main agents, committed
+as `rl/checkpoints/p3-explorer-5x5.npz` and `p3-designer-5x5.npz`).
+
+Walls hit on each designer's mazes:
+
+| designer | hard | expert | P2 | stage 0 | P3 greedy | P3 sampled | distinct | E→S |
+|---|---|---|---|---|---|---|---|---|
+| **P3** | 5.86 | **6.65** | 7.83 | 7.85 | 6.10 | 6.27 | 65% | 9.0 |
+| hard | 11.54 | 5.31 | 4.05 | 3.32 | 4.01 | 4.51 | 100% | 15.1 |
+| uniform | 1.65 | 2.71 | 3.31 | 3.95 | 3.86 | 3.91 | 100% | 4.4 |
+
+Duplicate format (`p3` = P3's explorer and designer; `learned` = P2's explorer with hard's designer;
+the expert designs like hard):
+
+| P3 vs | hits P3 | hits B | explorer edge | designer edge | score (dup) | score (round) |
+|---|---|---|---|---|---|---|
+| P2 | 5.05 | 5.94 | +0.88 ± 0.07 | +2.93 ± 0.08 | 54% ± 1 | **82% ± 1** |
+| expert | 5.06 | 5.93 | +0.87 ± 0.07 | +1.75 ± 0.08 | 57% ± 1 | **76% ± 1** |
+| stage 0 | 5.09 | 5.64 | +0.55 ± 0.06 | +3.21 ± 0.09 | 52% ± 1 | 84% ± 1 |
+
+Worst of 32 (`exploit`, 200 rounds): P3 9.45 ± 0.08 (sampled: 9.81), P2 9.55, stage 0 9.43.
+
+Exploiters (fresh, trained only against one frozen generation; walls on held-out mazes, sampled
+policies): designer exploiters push the frozen explorer to 10.2–11.8 of 12 every generation (gain
++6.7 at generation 1, +4.2 to +5.0 from generation 7 on); explorer exploiters gain +1.7 to +4.4.
+The sum, the exploitability estimate, went from +9.5 (generation 1) to +7.0 (generation 15), with
+noise (+6.4 to +9.2 in between).
+
+**Against the D24 targets.**
+- Explorer, worst of 32 ≤ 8: **not met** (9.45). On P2's held-out mazes it drifted *up* during the
+  run (hard 3.3 → 3.9): it spends its games on the league's designers.
+- Designer, expert ≥ 7 walls with varied mazes: **close** (6.65; every earlier designer ≤ 5.4), but
+  only 65% of its mazes are distinct and it uses ~11 E/S pairs. The wall entropy stayed ≈ 0.7 nats
+  per decision, above the floor, so the floor never engaged; the repeats come from the E/S choice.
+- Exploiters gaining less over generations: **partly** (+9.5 → +7.0, noisy).
+- Head to head: P3 wins **82% of rounds as played against P2 and 76% against the expert**, mostly
+  through its designer.
+
+**What it taught us.**
+1. **The designer exploiters collapse to one maze** (0.1–1.3% distinct of 1,024) where the frozen
+   explorer hits 11+ walls, and the main explorer then *memorizes* those mazes: it hits 0.00 walls on
+   every exploiter designer in its league. The league teaches recognition, not robustness: whack-a-mole.
+2. **That is RL_DESIGN §2's lesson 2 on 5×5:** a designer who knows a nearly deterministic explorer
+   can make it hit almost every wall. P3's explorer keeps ~0.54 nats per probe, and its sampled policy
+   is nearly as exploitable as its greedy one (11.26 vs 11.91 walls on generation 15's exploiter mazes). An unexploitable explorer must
+   randomize where it matters, and nothing in run 1 rewards that: a single-maze exploiter is beaten
+   by memorizing it, not by randomizing.
+3. Designer collapse is now visible and measured (D27's fix works as a measurement); the floor on
+   walls alone leaves E/S free to concentrate.
+
+**Recommendation for run 2** (resume from run 1, ~10.8 h, same networks):
+- **Exploiter designers get the same entropy floor** (0.5 nats per wall, and E/S included), so they
+  are families of adversarial mazes that can't be memorized: the explorer has to become robust to
+  them. A collapsed best response is still trained per generation, briefly, to measure the
+  worst case.
+- **The main designer's floor covers E and S too** (≥ 0.5 nats per decision over all decisions).
+- **More explorer entropy** (bonus 0.01 → 0.03), and exploitability measured on its sampled policy.
+- Keep 32 × 4, PFSP, magnets; drop collapsed exploiters from the explorer's league (they only cost
+  games once memorized).
