@@ -2,12 +2,13 @@
 
 A plain-language companion to [RL_DESIGN.md](RL_DESIGN.md) (the technical plan) and
 [DECISIONS.md](DECISIONS.md) (the why). Written 2026-10-23 for someone with an ML background but
-no reinforcement-learning (RL) experience; state of the code as of 2026-10-25.
+no reinforcement-learning (RL) experience; state of the code as of 2026-10-26.
 
 **Short version:** what you play today is hand-built logic. Humans can beat it because of two
 specific blind spots (§2), and the planned learning is aimed at exactly those. The first learned
 explorer (P2, 2026-10-25) exists in the training code: it beats the expert on bot-made mazes, but it
-isn't connected to the site yet.
+isn't connected to the site yet. P3 (started 2026-10-26) trains a maze *designer* too, on Kaggle
+GPUs; status in §7.
 
 ---
 
@@ -94,7 +95,8 @@ nothing is remembered between rounds or between players.
   3. Repeat: 4×4 → **5×5** → 8×8 → 10×10.
   4. Check against the exact 3×3 answers before trusting anything on 5×5.
 - **Status:** P0–P1 (foundation) and the non-learning expert are done. P2's first learned explorer
-  beats the expert on mazes made by the bots, but not yet on uniformly random ones (§7). Next is P3.
+  beats the expert on mazes made by the bots, but not yet on uniformly random ones. P3, where the
+  designer learns too, is training on Kaggle GPUs (§7).
 
 ## 5. Track B — human-based adaptation (later)
 
@@ -163,8 +165,26 @@ The plan as written before the work:
 - *Your input:* say "start P2". Optionally, decide whether RL work keeps landing directly on `main`
   (fine while the site doesn't use it) or goes through pull requests.
 
-**Then P3–P5.** Each is the same pattern: brief → session → tests + measurements → push.
-- **P3:** the designer network and the league, on 5×5.
+**Phase P3 (both roles learn): in progress, 2026-10-26** ([D25–D27](DECISIONS.md)).
+
+*Where it stands, in plain terms.* Training moved to Kaggle's free GPUs. A first measurement showed
+the GPU is 14× faster than the Mac, but only for a network as small as P2's, so P3 keeps that size
+and uses the speed for more practice games instead. That alone already helps: retraining P2's
+explorer with 6× more games (38 minutes on the GPU) makes it hit 3.4 walls on the hard bot's mazes,
+against 4.1 for P2 and 5.3 for the expert. Then the new part, a network that *designs* mazes, was
+trained against P2's frozen explorer. Within two minutes it found mazes where P2 hits 11.9 of its 12
+walls. P2 is good on average but has blind spots a learned designer finds at once. That is exactly
+the weakness §3's point 4 predicts, and why both sides must now learn together. The designer's
+failure mode showed up just as quickly: against a fixed opponent it stops varying and repeats a
+handful of mazes. That is what GAN people call mode collapse, and a readable pattern is what humans
+exploit. Two fixes went in. The designer now places walls in a fixed order, so the measure of
+variety we reward can't be faked by shuffling the same walls. And the variety bonus grows
+automatically whenever the variety drops under a floor. The first full run is now training for
+~11 hours: the explorer and the designer against each other and against their own past versions.
+On the second GPU, "exploiters" are trained to beat frozen copies of each, and they measure how
+much room for improvement is left.
+
+**Then P4–P5.** Each is the same pattern: brief → session → tests + measurements → push.
 - **P4:** shipping (§8).
 - **P5:** bigger boards.
 

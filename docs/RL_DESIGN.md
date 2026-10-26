@@ -391,8 +391,13 @@ The round scores match the JS benchmark (80% and 86%).
 
 **How it works.**
 - **Designer network:** the explorer's tower on the same lattice. It places E, then S, then the walls
-  one at a time; a wall can't go where it would cut S off from E, so every maze is valid. It sees BFS
-  distances from E and from S, since winding paths are what make mazes hard (D21).
+  one at a time in a fixed order (increasing edge number), so a sequence of decisions is a maze and
+  the policy's entropy is the maze entropy (D27). A look-ahead mask keeps every maze valid (exactly W
+  walls, S reachable from E). It sees BFS distances from E and from S, since winding paths are what
+  make mazes hard (D21).
+- **Variety:** the entropy bonus's coefficient rises automatically whenever the entropy per wall
+  decision falls below 0.5 nats (D27): without it, a designer collapses onto a few mazes within
+  minutes.
 - **Reward:** the walls an explorer hits in its maze, minus the average for that explorer (the
   designer doesn't know whom it faces).
 - **League:** the main explorer and designer train against each other (40% / 50% of their games)
@@ -406,7 +411,17 @@ The round scores match the JS benchmark (80% and 86%).
   trains P2's 32 × 4 network at 6,330 probes/s (14× the Mac); bigger networks miss D24's 5,000
   probes/s bar (D26).
 
-**Stages (D24):** calibration ✅, stage 0 (P2's recipe on the GPU) 🟡, league runs ⬜.
+**What it taught us so far.**
+- **The T4 is 14× the Mac on this workload, but only for small networks** (D26): 6,330 probes/s
+  with 32 × 4, 1,936 with 64 × 6. P3 keeps P2's size.
+- **More samples alone already beat P2** (stage 0, D27): 12 M probes instead of 2 M, same network,
+  give 3.36 walls on hard's mazes vs P2's 4.09 and the expert's 5.29.
+- **A learned designer finds P2's blind spots in two GPU minutes:** P2 hits 11.9 of 12 walls on its
+  mazes (the hard planner only 5–7). The worst-of-32 pick (9.5) understated how exploitable P2 is.
+- **Against one fixed explorer the designer collapses** onto a handful of mazes, and with free wall
+  order its per-step entropy hid it. Hence the canonical order and the entropy floor (D27).
+
+**Stages (D24):** calibration ✅, stage 0 ✅, league run 1 🟡 (2026-10-26), evaluation and run 2 ⬜.
 
 ## 6. Open questions
 

@@ -94,7 +94,8 @@ rl/.venv/bin/python rl/kaggle/drive.py push league --hours 10.8 --net 64x6
 - `bench`: duplicate-format evaluation of two bots. Options: `--pairs hard:normal,...`,
   `--mazes bots|random|uniform`, `--walls`, `--seed`. Bots: `easy`, `normal`, `hard`, `expert`
   (P2's bar, run by Node; `--particles`, default 200), and `learned` (`--checkpoint`, by default the
-  committed `rl/checkpoints/explorer-NxN.npz`).
+  committed `rl/checkpoints/explorer-NxN.npz`); `learned-b` is a second checkpoint
+  (`--checkpoint-b`), to compare two explorers head to head.
 - `throughput`: batched explorer steps/s on this machine. Options: `--obs` also computes the lattice
   observation, `--devices 8` splits the batch over 8 CPU devices.
 - `export-fixtures.mjs`: regenerates `rl/tests/fixtures/` after a change to the JS rules or bots;
@@ -245,10 +246,16 @@ most walls in. Options: `--bots learned,hard,expert`, `--rounds`, `--candidates`
 
 ### P3: the designer and the league (`designer.py`, `league.py`, [D25](../docs/DECISIONS.md))
 
-- **Designer:** places E, then S, then the walls one at a time on the explorer's lattice. A wall can't
-  go on a wall or on a side whose closing would cut S off from E, so every maze is valid. 14 input
-  planes (walls, open and cut sides, E, S, BFS distances from E and from S, phase, budget, walls
-  left, E→S distance, size); policy logits at cell and side pixels, value = W · sigmoid(…).
+- **Designer:** places E, then S, then the walls one at a time on the explorer's lattice, in
+  increasing edge order (D27): one decision sequence per maze, so the policy's entropy is the maze
+  entropy (`seq_entropy`, nats). A look-ahead mask (`next_wall_mask`, a 0-1 BFS per candidate)
+  allows side e only if the walls left still fit after it with S reachable, so every maze is valid.
+  15 input planes (walls, settled / pending / legal sides, E, S, BFS distances from E and from S,
+  phase, budget, walls left, E→S distance, size); policy logits at cell and side pixels, value =
+  W · sigmoid(…).
+- **Entropy floor:** the main designer's entropy coefficient (floor `--d-entropy` 0.01) rises by
+  dual ascent while the entropy per wall decision is under `--d-entropy-target` (0.5 nats).
+  Exploiters have none.
 - **One league iteration:**
   1. the main designer makes `--d-mazes` mazes; each is explored by one opponent (the main explorer
      half the time, otherwise a league explorer by PFSP), reward = walls hit minus that opponent's
@@ -282,8 +289,9 @@ most walls in. Options: `--bots learned,hard,expert`, `--rounds`, `--candidates`
   `league` (main training on GPU 0, the exploiter worker on GPU 1; `--resume` to continue).
 - The kernel installs jax[cuda12], unpacks the bundle into `/kaggle/working`, runs one job per GPU
   with a deadline under the 12-hour cap, and leaves runs, `logs/` and `summary.json` as its output.
-- `drive.py status` (check sparingly), `drive.py fetch` (output into `rl/runs/kaggle/<time>/`),
-  `drive.py quota` (GPU hours used this week).
+- `drive.py status` (check sparingly), `drive.py logs --seconds 60` (the live log: the kernel
+  prints its jobs' last lines every 15 minutes), `drive.py fetch` (output into
+  `rl/runs/kaggle/<time>/`), `drive.py quota` (GPU hours used this week).
 
 ## Parity with the JS engine
 

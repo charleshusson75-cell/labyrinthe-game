@@ -62,6 +62,13 @@ Living checklist. ✅ done · 🟡 partial · ⬜ todo. Design rationale lives i
 - 2026-10-25 — RL P2 learned explorer (D23): 259 pytest tests green (9 new: network on any
   board, planner prior, checkpoint round trip, a tiny training run that saves, resumes and plays in
   `bench`, the adversarial pick); `npm test` unchanged and green (24).
+- 2026-10-26 — RL P3 (D25–D27): 272 pytest tests green (13 new: the designer's look-ahead mask
+  against brute force on 3×3, BFS distances, valid mazes at every budget, observation and legal
+  moves, advantages, the designer learning against a fixed explorer, the entropy controller,
+  diversity statistics, PFSP weights, a tiny league that trains, resumes, absorbs exploiters and
+  plays in `bench` and `exploit`, the exploiter worker and `--designer-vs`, every Kaggle job's
+  command line); `npm test` unchanged and green (24). Kaggle: calibration, stage 0 and league
+  run 1 pushed with `rl/kaggle/drive.py`.
 - Not yet tested: two different devices / networks end-to-end, Safari iOS as host.
 
 ## Bot strength and luck (2026-10-21)
@@ -128,9 +135,16 @@ Full design: [RL_DESIGN.md](RL_DESIGN.md); decisions D15–D20 (2026-10-22), D21
   - ✅ GPU calibration (2026-10-26, [D26](DECISIONS.md)): T4 trains 6,330 probes/s with 32 × 4,
     1,936 with 64 × 6, 724 with 96 × 8 (Mac: 462 / 81). Only 32 × 4 clears 5,000 → P3 keeps P2's
     network size, in fp32 (fp16 gained nothing). 0.24 GPU h
-  - 🟡 Stage 0: P2's recipe on the GPU from scratch (1,024 games), plus a designer against P2's
-    explorer on the second GPU
-  - ⬜ League runs (~11 h each), evaluated on the Mac between runs
+  - ✅ Stage 0 (2026-10-26, [D27](DECISIONS.md)): P2's recipe from scratch on one T4, 12 M probes in
+    38 min. Bench on hard's mazes (1,000 deals): 3.36 walls vs P2's 4.09 (59% of seats) and the
+    expert's 5.29 (75%); worse than P2 on uniform mazes (3.83 vs 3.20). 0.66 GPU h
+  - ✅ A learned designer against P2's frozen explorer pushes it to 11.9 of 12 walls within 51 k
+    mazes, collapsing onto a few mazes ([D27](DECISIONS.md))
+  - ✅ Designer fixes ([D27](DECISIONS.md)): canonical wall order (the policy entropy is the maze
+    entropy) and an entropy floor of 0.5 nats per wall decision (dual ascent)
+  - 🟡 League run 1 (started 2026-10-26, 10.8 h session on Kaggle): explorer from stage 0, designer
+    from scratch, exploiters on the second GPU every 250 iterations
+  - ⬜ Evaluation on the Mac, then league run 2
 - P4: ship
 - P5: scale to 8×8/10×10
 - P6: play-time search

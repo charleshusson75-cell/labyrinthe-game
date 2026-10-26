@@ -8,7 +8,10 @@ enabled. The kernel:
 3. runs SPEC["jobs"] in parallel, each on its own GPU (CUDA_VISIBLE_DEVICES), with `{hours}` in
    their commands replaced by the time left before the session's deadline (SPEC["hours"] after the
    start, safely under Kaggle's 12-hour cap). Jobs checkpoint on their own (every ~20 minutes) and
-   stop cleanly at their deadline; a job still running 10 minutes later gets SIGTERM, then SIGKILL;
+   stop cleanly at their deadline; a job still running 10 minutes later gets SIGTERM, then SIGKILL.
+   When an "essential" job ends, the others get SIGTERM a minute later (no GPU left idling). Every
+   15 minutes the last lines of each job's log are printed, so `drive.py logs` shows progress while
+   the session runs;
 4. leaves everything in /kaggle/working (runs, logs/, summary.json): the kernel's output, which
    drive.py downloads.
 """
@@ -69,8 +72,25 @@ def main() -> int:
         print(f"[{job['name']}] GPU {job['gpu']}: {cmd}", flush=True)
         procs.append((job, subprocess.Popen(cmd, shell=True, cwd=WORK, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True), log))
     killed = set()
+    last_echo = time.time()
+    ended_at = None
     while any(p.poll() is None for _, p, _ in procs):
         time.sleep(30)
+        if time.time() - last_echo > 900:
+            last_echo = time.time()
+            for job, _, _ in procs:
+                with open(f"{WORK}/logs/{job['name']}.log", errors="replace") as f:
+                    lines = [line.rstrip() for line in f.readlines()[-3:]]
+                for line in lines:
+                    print(f"[{job['name']} {(time.time() - START) / 3600:.2f} h] {line[:400]}", flush=True)
+        if ended_at is None and any(job.get("essential") and p.poll() is not None for job, p, _ in procs):
+            ended_at = time.time()
+            print("an essential job ended: stopping the others in a minute", flush=True)
+        if ended_at is not None and time.time() - ended_at > 60:
+            for job, p, _ in procs:
+                if p.poll() is None and job["name"] not in killed:
+                    os.killpg(p.pid, signal.SIGTERM)
+                    killed.add(job["name"])
         late = time.time() - deadline
         for job, p, _ in procs:
             if p.poll() is None and late > 600 and job["name"] not in killed:

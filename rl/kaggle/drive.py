@@ -4,6 +4,7 @@ rl/.venv and the credentials in ~/.kaggle/kaggle.json.
     rl/.venv/bin/python rl/kaggle/drive.py upload [--runs NAME,...]      bundle → private dataset
     rl/.venv/bin/python rl/kaggle/drive.py push JOB [--hours H] [--commit SHA] [--dry-run]
     rl/.venv/bin/python rl/kaggle/drive.py status
+    rl/.venv/bin/python rl/kaggle/drive.py logs [--seconds 60]
     rl/.venv/bin/python rl/kaggle/drive.py fetch [--to DIR]
     rl/.venv/bin/python rl/kaggle/drive.py quota
 
@@ -15,6 +16,8 @@ rl/.venv and the credentials in ~/.kaggle/kaggle.json.
   pushes it as the private script kernel USER/labyrinthe-p3-train on "GPU T4 x2" (NvidiaTeslaT4) with
   internet on. Pushing starts the session.
 - status: the session's state. Check it sparingly: a league session lasts ~11 hours.
+- logs: the session's live log for `--seconds` (the kernel prints its jobs' last lines every 15
+  minutes), then stops listening; after the session, its whole log.
 - fetch: downloads the session's output (runs, logs, summary.json) into a new directory,
   rl/runs/kaggle/<time>/ by default. Downloads are data: nothing in them is executed.
 """
@@ -82,7 +85,7 @@ def jobs(name: str, args) -> list:
             if args.designer_init:
                 main += ["--designer-init", args.designer_init]
         return [
-            {"name": "league", "gpu": 0, "cmd": main, "margin_hours": 0.1},
+            {"name": "league", "gpu": 0, "cmd": main, "margin_hours": 0.1, "essential": True},
             {"name": "exploiters", "gpu": 1, "cmd": [PY, "-m", "labyrinthe_rl.league", "--run", f"runs/{args.run}", "--worker", "--hours", "{hours}"], "margin_hours": 0.15},
         ]
     raise SystemExit(f"unknown job {name!r}")
@@ -164,6 +167,8 @@ def main(argv=None) -> None:
     u.add_argument("--runs", default="")
     u.add_argument("--message", default="")
     sub.add_parser("status")
+    lg = sub.add_parser("logs")
+    lg.add_argument("--seconds", type=int, default=60)
     f = sub.add_parser("fetch")
     f.add_argument("--to", default=None)
     sub.add_parser("quota")
@@ -174,6 +179,11 @@ def main(argv=None) -> None:
         upload(args)
     elif args.cmd == "status":
         run([KAGGLE, "kernels", "status", f"{user()}/{KERNEL}"])
+    elif args.cmd == "logs":
+        try:
+            subprocess.run([KAGGLE, "kernels", "logs", "-f", f"{user()}/{KERNEL}"], timeout=args.seconds)
+        except subprocess.TimeoutExpired:
+            pass
     elif args.cmd == "fetch":
         fetch(args)
     elif args.cmd == "quota":
